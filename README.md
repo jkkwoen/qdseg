@@ -1,8 +1,35 @@
 # QDSeg
 
-A Python package for Quantum Dot (QD) segmentation and analysis from AFM/XQD images (Version 0.2.2)
+A Python package for Quantum Dot (QD) segmentation and analysis from AFM/XQD images (Version 0.2.3)
 
 > ⚠️ **Python Version Requirement**: This package requires **Python 3.12**. TensorFlow (required for StarDist) does not yet support Python 3.13+.
+
+## Design Philosophy
+
+QDSeg is designed as a **pure analysis library** with the following characteristics:
+
+| Characteristic | Description |
+|----------------|-------------|
+| **Stateless** | No database or file system state management |
+| **Single-file focused** | Processes one image at a time |
+| **Reusable** | Can be used as a dependency in other projects |
+
+This design allows QDSeg to be easily integrated into larger workflows (e.g., batch processing systems, databases, web applications) while keeping the core analysis logic clean and testable.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         qdseg                               │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ Data Load   │→ │ Corrections │→ │ Segmentation        │  │
+│  │ (AFMData)   │  │             │  │                     │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+│                                              ↓              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ PDF Report  │← │ Individual  │← │ Statistics          │  │
+│  │             │  │ Grains      │  │                     │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## Features
 
@@ -207,19 +234,38 @@ The package automatically detects and supports various GPU environments:
 qdseg/
 ├── qdseg/
 │   ├── __init__.py              # Package initialization and main exports
-│   ├── io.py                    # XQD file reading
-│   ├── corrections.py           # Correction functions
-│   ├── grain_analysis.py        # Grain analysis functions
-│   ├── segmentation.py          # Segmentation methods
-│   ├── statistics.py            # Statistics calculation
-│   ├── utils.py                 # Utility functions (GPU support included)
-│   ├── afm_data_wrapper.py      # AFMData wrapper class
-│   ├── analyze.py               # High-level analysis functions
-│   └── train_model.py           # Model training utilities
+│   ├── afm_data_wrapper.py      # AFMData - XQD file loading and data access
+│   ├── io.py                    # Low-level XQD file reading
+│   ├── corrections.py           # Data corrections (flat, baseline, etc.)
+│   ├── segmentation.py          # Segmentation algorithms
+│   │                            # - segment_rule_based (Classical/Watershed)
+│   │                            # - segment_stardist (TensorFlow)
+│   │                            # - segment_cellpose (PyTorch)
+│   │                            # - segment_cellulus (PyTorch, requires training)
+│   ├── statistics.py            # Grain statistics calculation
+│   ├── analyze.py               # High-level analysis API
+│   ├── utils.py                 # GPU utilities (CUDA, MPS, Metal detection)
+│   ├── grain_analysis.py        # (Deprecated) Legacy compatibility
+│   ├── train_model.py           # Model training utilities
+│   └── training/                # Training modules
+│       ├── cellulus_trainer.py
+│       ├── cellpose_trainer.py
+│       └── stardist_trainer.py
 ├── requirements.txt
 ├── setup.py
 └── README.md
 ```
+
+### Module Responsibilities
+
+| Module | Responsibility |
+|--------|----------------|
+| `AFMData` | XQD file loading and data access |
+| `corrections.py` | Data correction (first/second/third, flat, baseline) |
+| `segmentation.py` | Segmentation algorithms (Classical, StarDist, CellPose, Cellulus) |
+| `statistics.py` | Grain statistics calculation (stats, individual grains) |
+| `analyze.py` | High-level analysis API and PDF report generation |
+| `utils.py` | GPU utilities and environment setup |
 
 ## Main API
 
