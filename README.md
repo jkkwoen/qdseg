@@ -1,6 +1,6 @@
 # QDSeg
 
-A Python package for Quantum Dot (QD) segmentation and analysis from AFM/XQD images (Version 0.2.0)
+A Python package for Quantum Dot (QD) segmentation and analysis from AFM/XQD images (Version 0.2.1)
 
 ## Features
 
