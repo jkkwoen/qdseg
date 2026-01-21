@@ -41,7 +41,8 @@ def calculate_grain_statistics(
     stats : dict
         Grain statistics including:
         - num_grains: int
-        - mean_area_nm2, std_area_nm2: float
+        - mean_area_nm2, std_area_nm2, min_area_nm2, max_area_nm2: float
+        - mean_area_px, std_area_px, min_area_px, max_area_px: float
         - mean_diameter_nm, std_diameter_nm: float
         - mean_diameter_px, std_diameter_px: float
         - mean_perimeter_nm, std_perimeter_nm: float
@@ -102,6 +103,8 @@ def calculate_grain_statistics(
             'mean_area_nm2': float(np.mean(areas_nm2)),
             'std_area_px': float(np.std(areas_px)),
             'std_area_nm2': float(np.std(areas_nm2)),
+            'min_area_px': float(np.min(areas_px)),
+            'max_area_px': float(np.max(areas_px)),
             'min_area_nm2': float(np.min(areas_nm2)),
             'max_area_nm2': float(np.max(areas_nm2)),
             
@@ -221,6 +224,8 @@ def calculate_grain_statistics(
         'mean_area_nm2': float(np.mean(areas_nm2)),
         'std_area_px': float(np.std(areas_px)),
         'std_area_nm2': float(np.std(areas_nm2)),
+        'min_area_px': float(np.min(areas_px)),
+        'max_area_px': float(np.max(areas_px)),
         'min_area_nm2': float(np.min(areas_nm2)),
         'max_area_nm2': float(np.max(areas_nm2)),
         
@@ -456,6 +461,8 @@ def _empty_statistics() -> Dict[str, Any]:
         'mean_area_nm2': 0.0,
         'std_area_px': 0.0,
         'std_area_nm2': 0.0,
+        'min_area_px': 0.0,
+        'max_area_px': 0.0,
         'min_area_nm2': 0.0,
         'max_area_nm2': 0.0,
         'mean_diameter_nm': 0.0,
