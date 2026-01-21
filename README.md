@@ -1,6 +1,8 @@
 # QDSeg
 
-A Python package for Quantum Dot (QD) segmentation and analysis from AFM/XQD images (Version 0.2.1)
+A Python package for Quantum Dot (QD) segmentation and analysis from AFM/XQD images (Version 0.2.2)
+
+> ⚠️ **Python Version Requirement**: This package requires **Python 3.12**. TensorFlow (required for StarDist) does not yet support Python 3.13+.
 
 ## Features
 
@@ -34,15 +36,20 @@ pip install git+https://github.com/jkkwoen/qdseg.git
 If you plan to modify the code:
 
 ```bash
-# Create virtual environment (optional)
-python3 -m venv .venv
+# Create virtual environment with Python 3.12 (REQUIRED)
+python3.12 -m venv .venv
 source .venv/bin/activate  # Linux/Mac
 # or
 .venv\Scripts\activate  # Windows
 
+# Verify Python version
+python --version  # Should show Python 3.12.x
+
 # Install in editable mode
 pip install -e .
 ```
+
+> 💡 **Why Python 3.12?**: TensorFlow (used by StarDist for deep learning segmentation) does not support Python 3.13 or 3.14. Python 3.12 is the latest fully supported version for all dependencies.
 
 ### Environment Variables
 
@@ -165,19 +172,26 @@ trainer.train()
 
 ## Dependencies
 
+### Python Version
+
+- **Python 3.12** (Required)
+  - Python 3.13+ is NOT supported due to TensorFlow compatibility
+  - Use `python3.12 -m venv .venv` to create a compatible environment
+
 ### Required Dependencies
 
-- Python 3.8+
 - numpy>=1.24.0
 - matplotlib>=3.7.0
 - scipy>=1.10.0
 - scikit-learn>=1.3.0
 - scikit-image>=0.20.0
+- python-dotenv>=1.0.0
 
 ### Optional Dependencies
 
 - **StarDist**: `stardist>=0.8.0`, `tensorflow>=2.10.0`
 - **CellPose**: `cellpose>=3.0.0`
+- **Training**: `torch>=2.0.0`, `zarr>=2.16.0`, `tqdm>=4.65.0`
 
 ## GPU Support
 
