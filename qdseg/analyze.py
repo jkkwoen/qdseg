@@ -218,7 +218,7 @@ def _create_grain_analysis_pdf(
 ) -> Path:
     """Create PDF with original and grain_mask plots."""
     
-    pdf_path = output_dir / f"{stem}_grain_analysis.pdf"
+    pdf_path = output_dir / f"{stem}_grain_analysis_{method}.pdf"
     
     fig, axes = plt.subplots(1, 2, figsize=(16, 8))
     
