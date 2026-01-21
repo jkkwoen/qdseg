@@ -14,7 +14,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from .afm_data_wrapper import AFMData
-from .segmentation import segment_rule_based, segment_stardist
+from .segmentation import (
+    segment_rule_based,
+    segment_stardist,
+    segment_cellpose,
+    segment_cellulus,
+)
 from .statistics import calculate_grain_statistics, get_individual_grains
 from skimage.segmentation import find_boundaries
 
@@ -36,7 +41,7 @@ def analyze_grains(
     meta : dict, optional
         Metadata with 'pixel_nm' key
     method : str
-        Segmentation method: 'classical' or 'stardist' (default: 'classical')
+        Segmentation method: 'classical', 'stardist', 'cellpose', or 'cellulus' (default: 'classical')
     **kwargs
         Additional arguments passed to segmentation function
     
@@ -62,8 +67,15 @@ def analyze_grains(
         labels = segment_rule_based(height, meta, **kwargs)
     elif method == "stardist":
         labels = segment_stardist(height, meta, **kwargs)
+    elif method == "cellpose":
+        labels = segment_cellpose(height, meta, **kwargs)
+    elif method == "cellulus":
+        labels = segment_cellulus(height, meta, **kwargs)
     else:
-        raise ValueError(f"Unknown method: {method}. Use 'classical' or 'stardist'")
+        raise ValueError(
+            f"Unknown method: {method}. "
+            f"Supported methods: 'classical', 'stardist', 'cellpose', 'cellulus'"
+        )
     
     # Calculate statistics
     stats = calculate_grain_statistics(labels, height, meta)
@@ -96,7 +108,7 @@ def analyze_single_file_with_grain_data(
     output_dir : Path
         Output directory for PDF file
     method : str
-        Segmentation method: 'classical' or 'stardist' (default: 'classical')
+        Segmentation method: 'classical', 'stardist', 'cellpose', or 'cellulus' (default: 'classical')
     gaussian_sigma : float
         Gaussian smoothing sigma (for classical method)
     min_area_nm2 : float
@@ -104,7 +116,7 @@ def analyze_single_file_with_grain_data(
     min_peak_separation_nm : float
         Minimum peak separation in nm (for classical method)
     **kwargs
-        Additional arguments for segmentation
+        Additional arguments for segmentation (method-specific)
     
     Returns
     -------
@@ -138,7 +150,7 @@ def analyze_single_file_with_grain_data(
         x_size_nm, y_size_nm = meta.get("scan_size_nm", (height_raw.shape[1], height_raw.shape[0]))
         extent = [0, x_size_nm, 0, y_size_nm]
         
-        # Calculate min_area_px
+        # Calculate min_area_px (for classical method)
         min_area_px = nm2_to_px_area(min_area_nm2, pixel_nm)
         
         # Perform segmentation
@@ -154,8 +166,15 @@ def analyze_single_file_with_grain_data(
             )
         elif method == "stardist":
             labels = segment_stardist(height_corrected, meta, **kwargs)
+        elif method == "cellpose":
+            labels = segment_cellpose(height_corrected, meta, **kwargs)
+        elif method == "cellulus":
+            labels = segment_cellulus(height_corrected, meta, **kwargs)
         else:
-            raise ValueError(f"Unknown method: {method}")
+            raise ValueError(
+                f"Unknown method: {method}. "
+                f"Supported methods: 'classical', 'stardist', 'cellpose', 'cellulus'"
+            )
         
         num_grains = int(labels.max())
         print(f"   ✓ Segmentation completed: {num_grains} grains detected")
