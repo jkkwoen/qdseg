@@ -33,6 +33,7 @@ GPU 가속 (환경에 따라 자동 감지):
     >>> 
     >>> # 2. 보정 적용
     >>> data.first_correction().second_correction().third_correction()
+    >>> data.align_rows(method='median')  # Scan Line Artefacts 보정 (flat 전)
     >>> data.flat_correction("line_by_line").baseline_correction("min_to_zero")
     >>> 
     >>> # 3. 세그멘테이션
@@ -85,7 +86,7 @@ from .training import (
     setup_environment,
 )
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 __all__ = [
     # Segmentation

@@ -45,10 +45,59 @@ class AFMData:
         self.current_data = self._corrector.correct_3rd(self.current_data)
         return self
     
-    def flat_correction(self, method: str = "line_by_line") -> 'AFMData':
-        """평면 보정"""
+    def align_rows(self, method: str = 'median', poly_degree: int = 0, 
+                   trim_fraction: float = 0.0) -> 'AFMData':
+        """Scan Line Artefacts 보정 (flat_correction 전에 적용 권장)
+        
+        스캔 라인 간 불일치를 보정합니다. 빠른 스캔 축(일반적으로 x축)에서
+        촬영한 프로필들이 서로 약간씩 이동되거나 기울기가 다를 수 있습니다.
+        
+        Parameters
+        ----------
+        method : str
+            보정 방법 (기본값: 'median')
+            - 'median': 각 라인의 median 값을 빼서 정렬
+            - 'mean': 각 라인의 mean 값을 빼서 정렬
+            - 'polynomial': 각 라인에서 다항식 피팅 후 제거
+            - 'median_difference': 수직 이웃 간 높이 차이의 median을 0으로
+            - 'trimmed_mean': 최저/최고값 일부를 제거한 평균 사용
+        poly_degree : int
+            polynomial 방법 사용 시 다항식 차수 (기본값: 0)
+        trim_fraction : float
+            trimmed_mean 방법 사용 시 제거할 비율 (0~0.5, 기본값: 0.0)
+        
+        Returns
+        -------
+        AFMData
+            self (메서드 체이닝 지원)
+        """
+        self._corrector.set_align_rows_method(method)
+        self.current_data = self._corrector.align_rows(
+            self.current_data, 
+            method=method,
+            poly_degree=poly_degree,
+            trim_fraction=trim_fraction
+        )
+        return self
+    
+    def flat_correction(self, method: str = "line_by_line", mask: Optional[np.ndarray] = None) -> 'AFMData':
+        """평면 보정
+        
+        Parameters
+        ----------
+        method : str
+            평면 보정 방법 (기본값: "line_by_line")
+        mask : Optional[np.ndarray]
+            세그멘테이션 마스크 (기본값: None)
+            마스크가 제공되면 배경 픽셀(mask==0)만 사용하여 보정 계산
+        
+        Returns
+        -------
+        AFMData
+            self (메서드 체이닝 지원)
+        """
         self._corrector.set_flat_method(method)
-        self.current_data = self._corrector.correct_flat(self.current_data)
+        self.current_data = self._corrector.correct_flat(self.current_data, mask=mask)
         return self
     
     def baseline_correction(self, method: str = "min_to_zero") -> 'AFMData':
