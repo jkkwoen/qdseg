@@ -1,0 +1,1 @@
+- .venv 에 python3.12 가상환경을 설치하고 관련 모듈들을 requirements.txt 를 확인하여 설치.

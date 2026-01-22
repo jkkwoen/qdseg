@@ -141,12 +141,19 @@ from qdseg import (
     calculate_grain_statistics,
     get_individual_grains
 )
-from qdseg.afm_data_wrapper import AFMData
+from qdseg import AFMData
 
-# Read XQD file
-data = AFMData.from_xqd("path/to/file.xqd")
-height = data.height
-meta = data.meta
+# Read XQD file and apply corrections
+data = AFMData("path/to/file.xqd")
+
+# Apply corrections (recommended order)
+data.first_correction().second_correction().third_correction()
+data.align_rows(method='median')  # Scan Line Artefacts correction (before flat correction)
+data.flat_correction("line_by_line").baseline_correction("min_to_zero")
+
+# Get corrected data
+height = data.get_data()
+meta = data.get_meta()
 
 # Choose segmentation method
 labels = segment_rule_based(height, meta)  # Default method
@@ -157,6 +164,26 @@ labels = segment_rule_based(height, meta)  # Default method
 # Calculate statistics
 stats = calculate_grain_statistics(labels, height, meta)
 individual_grains = get_individual_grains(labels, height, meta)
+```
+
+### Scan Line Artefacts Correction
+
+```python
+from qdseg import AFMData
+
+data = AFMData("path/to/file.xqd")
+data.first_correction().second_correction().third_correction()
+
+# Apply Scan Line Artefacts correction (align rows)
+# Available methods: 'median', 'mean', 'polynomial', 'median_difference', 'trimmed_mean'
+data.align_rows(method='median')  # Basic method (recommended)
+# data.align_rows(method='mean')  # Mean value subtraction
+# data.align_rows(method='polynomial', poly_degree=1)  # Remove linear slopes
+# data.align_rows(method='median_difference')  # Better preserves large features
+# data.align_rows(method='trimmed_mean', trim_fraction=0.1)  # Robust against outliers
+
+data.flat_correction("line_by_line").baseline_correction("min_to_zero")
+```
 ```
 
 ### GPU Status Check
