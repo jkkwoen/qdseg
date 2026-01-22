@@ -1,6 +1,6 @@
 # QDSeg
 
-A Python package for Quantum Dot (QD) segmentation and analysis from AFM/XQD images (Version 0.2.3)
+A Python package for Quantum Dot (QD) segmentation and analysis from AFM/XQD images (Version 0.2.4)
 
 > ⚠️ **Python Version Requirement**: This package requires **Python 3.12**. TensorFlow (required for StarDist) does not yet support Python 3.13+.
 
