@@ -160,11 +160,16 @@ def segment_watershed(
     height_smoothed = filters.gaussian(height, sigma=gaussian_sigma, preserve_range=True)
 
     # 2. Local maxima 검출 (grain peak)
-    local_max = peak_local_max(
+    # scikit-image 0.18+ 호환: indices 파라미터 제거됨
+    local_max_coords = peak_local_max(
         height_smoothed,
         min_distance=min_distance,
-        indices=False
     )
+    
+    # 좌표를 boolean mask로 변환
+    local_max = np.zeros(height_smoothed.shape, dtype=bool)
+    if len(local_max_coords) > 0:
+        local_max[tuple(local_max_coords.T)] = True
 
     # 3. Marker 생성
     markers = ndi.label(local_max)[0]
