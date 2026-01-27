@@ -6,10 +6,10 @@ Grain Segmentation Methods
     Output: labels (2D int array, 0=background, 1,2,3...=grains)
 
 사용 예시:
-    >>> from grain_analyzer.segmentation import segment_rule_based, segment_stardist, segment_cellpose
+    >>> from qdseg.segmentation import segment_rule_based, segment_watershed, segment_stardist
     >>> labels = segment_rule_based(height, meta)
+    >>> labels = segment_watershed(height, meta)
     >>> labels = segment_stardist(height, meta)
-    >>> labels = segment_cellpose(height, meta)
 """
 
 import warnings
@@ -30,8 +30,14 @@ def segment_rule_based(
     min_peak_separation_nm: float = 10.0,
 ) -> np.ndarray:
     """
-    Rule-based segmentation: Otsu + Distance Transform + Voronoi
-    
+    Rule-based segmentation: Otsu + Distance Transform + DBSCAN + Voronoi
+
+    Steps:
+    1. Gaussian smoothing + Otsu thresholding
+    2. Distance transform + peak detection
+    3. DBSCAN clustering (merge nearby peaks)
+    4. Voronoi segmentation from representative peaks
+
     Parameters
     ----------
     height : np.ndarray
@@ -44,12 +50,12 @@ def segment_rule_based(
         Minimum grain area in pixels (default: 10)
     min_peak_separation_nm : float
         Minimum separation between peaks in nm (default: 10.0)
-    
+
     Returns
     -------
     labels : np.ndarray
         Label image (int32, 0=background, 1,2,3...=grains)
-    
+
     Examples
     --------
     >>> labels = segment_rule_based(height, meta, gaussian_sigma=1.5)
@@ -57,41 +63,41 @@ def segment_rule_based(
     """
     pixel_nm = meta.get("pixel_nm", (1.0, 1.0)) if meta else (1.0, 1.0)
     xp_nm, yp_nm = float(pixel_nm[0]), float(pixel_nm[1])
-    
+
     # 1. Smoothing + Thresholding
     h_smooth = gaussian(height, sigma=gaussian_sigma, preserve_range=True)
     binary = h_smooth > threshold_otsu(h_smooth)
-    
+
     # Remove small objects (suppress deprecation warning for min_size)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", FutureWarning)
         binary = remove_small_objects(binary, min_size=min_area_px)
-    
+
     if not np.any(binary):
         return np.zeros(height.shape, dtype=np.int32)
-    
+
     # 2. Distance transform and peak detection
     distance = ndi.distance_transform_edt(binary)
     avg_px_nm = float(np.mean(pixel_nm)) if np.all(np.isfinite(pixel_nm)) else 1.0
     min_dist_px = max(1, int(round((min_peak_separation_nm / avg_px_nm) / 2.0)))
-    
+
     coords = peak_local_max(
         distance,
         labels=binary,
         min_distance=min_dist_px,
         exclude_border=False,
     )
-    
+
     if coords.size == 0:
         return np.zeros(height.shape, dtype=np.int32)
-    
+
     # 3. Cluster nearby peaks using DBSCAN
     try:
         from sklearn.cluster import DBSCAN
-        
+
         coords_nm = np.column_stack([coords[:, 0] * yp_nm, coords[:, 1] * xp_nm])
         clustering = DBSCAN(eps=min_peak_separation_nm, min_samples=1).fit(coords_nm)
-        
+
         rep_coords = []
         for lab in np.unique(clustering.labels_):
             idxs = np.where(clustering.labels_ == lab)[0]
@@ -101,11 +107,169 @@ def segment_rule_based(
     except ImportError:
         # sklearn 없으면 모든 좌표 사용
         rep_coords = coords
-    
+
     # 4. Voronoi segmentation from markers
     labels = _voronoi_from_markers(height.shape, rep_coords, binary, pixel_nm)
-    
+
     return labels
+
+
+def segment_watershed(
+    height: np.ndarray,
+    meta: Optional[Dict] = None,
+    *,
+    gaussian_sigma: float = 1.0,
+    min_distance: int = 5,
+    min_area_px: int = 20
+) -> np.ndarray:
+    """
+    Watershed 기반 grain segmentation
+
+    Steps:
+    1. Gaussian blur로 노이즈 제거
+    2. Local maxima를 marker로 검출
+    3. Watershed 알고리즘 적용
+    4. 작은 영역 필터링
+
+    Parameters
+    ----------
+    height : np.ndarray
+        Height map (2D numpy array)
+    meta : dict, optional
+        Metadata (optional)
+    gaussian_sigma : float
+        Gaussian blur sigma (default: 1.0)
+    min_distance : int
+        Local maxima 간 최소 거리 (픽셀) (default: 5)
+    min_area_px : int
+        최소 grain 면적 (픽셀) (default: 20)
+
+    Returns
+    -------
+    labels : np.ndarray
+        Label image (int32, 0=background, 1,2,3,...=grain IDs)
+
+    Examples
+    --------
+    >>> labels = segment_watershed(height)
+    >>> labels = segment_watershed(height, min_distance=10)
+    """
+    from skimage import filters, morphology, segmentation
+
+    # 1. Gaussian blur로 노이즈 제거
+    height_smoothed = filters.gaussian(height, sigma=gaussian_sigma, preserve_range=True)
+
+    # 2. Local maxima 검출 (grain peak)
+    local_max = peak_local_max(
+        height_smoothed,
+        min_distance=min_distance,
+        indices=False
+    )
+
+    # 3. Marker 생성
+    markers = ndi.label(local_max)[0]
+
+    # 4. Watershed segmentation
+    # Watershed는 보통 gradient 이미지에서 수행
+    gradient = filters.sobel(height_smoothed)
+    labeled_image = segmentation.watershed(gradient, markers)
+
+    # 5. 작은 영역 제거
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        labeled_image = morphology.remove_small_objects(
+            labeled_image.astype(int),
+            min_size=min_area_px
+        )
+
+    # 6. Label 재정렬 (1부터 연속된 숫자로)
+    labeled_image = morphology.label(labeled_image > 0)
+
+    return labeled_image.astype(np.int32)
+
+
+def segment_thresholding(
+    height: np.ndarray,
+    meta: Optional[Dict] = None,
+    *,
+    threshold_method: str = 'otsu',
+    threshold_value: Optional[float] = None,
+    min_area_px: int = 20,
+    closing_size: int = 3
+) -> np.ndarray:
+    """
+    Thresholding 기반 grain segmentation
+
+    Steps:
+    1. Threshold 결정 (Otsu, Isodata, Manual 등)
+    2. 이진화 (Binary thresholding)
+    3. Morphological closing (구멍 메우기)
+    4. Connected component labeling
+    5. 작은 영역 필터링
+
+    Parameters
+    ----------
+    height : np.ndarray
+        Height map (2D numpy array)
+    meta : dict, optional
+        Metadata (optional)
+    threshold_method : str
+        'otsu', 'isodata', 'manual' (default: 'otsu')
+    threshold_value : float, optional
+        Manual threshold value (nm) (used if method='manual')
+    min_area_px : int
+        최소 grain 면적 (픽셀) (default: 20)
+    closing_size : int
+        Morphological closing kernel size (default: 3)
+
+    Returns
+    -------
+    labels : np.ndarray
+        Label image (int32, 0=background, 1,2,3,...=grain IDs)
+
+    Examples
+    --------
+    >>> labels = segment_thresholding(height)
+    >>> labels = segment_thresholding(height, threshold_method='isodata')
+    >>> labels = segment_thresholding(height, threshold_method='manual', threshold_value=5.0)
+    """
+    from skimage import filters, morphology
+
+    # 1. Threshold 결정
+    if threshold_method == 'otsu':
+        threshold = filters.threshold_otsu(height)
+    elif threshold_method == 'isodata':
+        threshold = filters.threshold_isodata(height)
+    elif threshold_method == 'manual':
+        if threshold_value is None:
+            raise ValueError("threshold_value must be provided when method='manual'")
+        threshold = threshold_value
+    else:
+        raise ValueError(f"Unknown threshold_method: {threshold_method}")
+
+    # 2. 이진화
+    binary = height > threshold
+
+    # 3. Morphological closing (작은 구멍 메우기)
+    if closing_size > 0:
+        selem = morphology.disk(closing_size)
+        binary = morphology.closing(binary, selem)
+
+    # 4. Connected component labeling
+    labeled_image = morphology.label(binary)
+
+    # 5. 작은 영역 제거
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        labeled_image = morphology.remove_small_objects(
+            labeled_image,
+            min_size=min_area_px
+        )
+
+    # 6. Label 재정렬
+    labeled_image = morphology.label(labeled_image > 0)
+
+    return labeled_image.astype(np.int32)
 
 
 def segment_stardist(
