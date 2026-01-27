@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 from .afm_data_wrapper import AFMData
 from .segmentation import (
     segment_rule_based,
+    segment_watershed,
+    segment_thresholding,
     segment_stardist,
     segment_cellpose,
     segment_cellulus,
@@ -28,12 +30,12 @@ def analyze_grains(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
-    method: str = "classical",
+    method: str = "rule_based",
     **kwargs
 ) -> Dict[str, Any]:
     """
     Analyze grains in height image
-    
+
     Parameters
     ----------
     height : np.ndarray
@@ -41,10 +43,16 @@ def analyze_grains(
     meta : dict, optional
         Metadata with 'pixel_nm' key
     method : str
-        Segmentation method: 'classical', 'stardist', 'cellpose', or 'cellulus' (default: 'classical')
+        Segmentation method (default: 'rule_based')
+        - 'rule_based': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
+        - 'watershed': Watershed segmentation
+        - 'thresholding': Height threshold based
+        - 'stardist': StarDist deep learning
+        - 'cellpose': CellPose deep learning
+        - 'cellulus': Cellulus deep learning
     **kwargs
         Additional arguments passed to segmentation function
-    
+
     Returns
     -------
     result : dict
@@ -53,18 +61,33 @@ def analyze_grains(
         - stats: dict - Overall statistics
         - grains: List[dict] - Individual grain data
         - method: str - Method used
-    
+
     Examples
     --------
-    >>> result = analyze_grains(height, meta, method="classical")
+    >>> result = analyze_grains(height, meta, method="rule_based")
     >>> print(f"Found {result['stats']['num_grains']} grains")
-    
+
+    >>> # With watershed
+    >>> result = analyze_grains(height, meta, method="watershed")
+
     >>> # With StarDist
     >>> result = analyze_grains(height, meta, method="stardist", prob_thresh=0.6)
     """
+    # Method mapping for backward compatibility
+    method_map = {
+        'classical': 'rule_based',
+        'advanced_watershed': 'rule_based',
+        'simple_watershed': 'watershed',
+    }
+    method = method_map.get(method.lower(), method.lower())
+
     # Select segmentation method
-    if method == "classical":
+    if method == "rule_based":
         labels = segment_rule_based(height, meta, **kwargs)
+    elif method == "watershed":
+        labels = segment_watershed(height, meta, **kwargs)
+    elif method == "thresholding":
+        labels = segment_thresholding(height, meta, **kwargs)
     elif method == "stardist":
         labels = segment_stardist(height, meta, **kwargs)
     elif method == "cellpose":
@@ -74,13 +97,14 @@ def analyze_grains(
     else:
         raise ValueError(
             f"Unknown method: {method}. "
-            f"Supported methods: 'classical', 'stardist', 'cellpose', 'cellulus'"
+            f"Supported methods: 'rule_based', 'watershed', 'thresholding', "
+            f"'stardist', 'cellpose', 'cellulus'"
         )
-    
+
     # Calculate statistics
     stats = calculate_grain_statistics(labels, height, meta)
     grains = get_individual_grains(labels, height, meta)
-    
+
     return {
         "labels": labels,
         "stats": stats,
@@ -90,9 +114,9 @@ def analyze_grains(
 
 
 def analyze_single_file_with_grain_data(
-    xqd_file: Path, 
+    xqd_file: Path,
     output_dir: Path,
-    method: str = "classical",
+    method: str = "rule_based",
     gaussian_sigma: float = 1.0,
     min_area_nm2: float = 78.5,
     min_peak_separation_nm: float = 10.0,
@@ -100,7 +124,7 @@ def analyze_single_file_with_grain_data(
 ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[str]]:
     """
     Analyze a single XQD file and return grain data and statistics.
-    
+
     Parameters
     ----------
     xqd_file : Path
@@ -108,16 +132,22 @@ def analyze_single_file_with_grain_data(
     output_dir : Path
         Output directory for PDF file
     method : str
-        Segmentation method: 'classical', 'stardist', 'cellpose', or 'cellulus' (default: 'classical')
+        Segmentation method (default: 'rule_based')
+        - 'rule_based': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
+        - 'watershed': Watershed segmentation
+        - 'thresholding': Height threshold based
+        - 'stardist': StarDist deep learning
+        - 'cellpose': CellPose deep learning
+        - 'cellulus': Cellulus deep learning
     gaussian_sigma : float
-        Gaussian smoothing sigma (for classical method)
+        Gaussian smoothing sigma (for rule_based and watershed methods)
     min_area_nm2 : float
         Minimum grain area in nm²
     min_peak_separation_nm : float
-        Minimum peak separation in nm (for classical method)
+        Minimum peak separation in nm (for rule_based method)
     **kwargs
         Additional arguments for segmentation (method-specific)
-    
+
     Returns
     -------
     Tuple[bool, Optional[Dict], Optional[Dict], Optional[str]]
@@ -153,16 +183,37 @@ def analyze_single_file_with_grain_data(
         # Calculate min_area_px (for classical method)
         min_area_px = nm2_to_px_area(min_area_nm2, pixel_nm)
         
+        # Method mapping for backward compatibility
+        method_map = {
+            'classical': 'rule_based',
+            'advanced_watershed': 'rule_based',
+            'simple_watershed': 'watershed',
+        }
+        method = method_map.get(method.lower(), method.lower())
+
         # Perform segmentation
         print(f"   🔬 Performing {method} grain segmentation...")
-        
-        if method == "classical":
+
+        if method == "rule_based":
             labels = segment_rule_based(
                 height_corrected,
                 meta,
                 gaussian_sigma=gaussian_sigma,
                 min_area_px=min_area_px,
                 min_peak_separation_nm=min_peak_separation_nm,
+            )
+        elif method == "watershed":
+            labels = segment_watershed(
+                height_corrected,
+                meta,
+                gaussian_sigma=gaussian_sigma,
+                min_area_px=min_area_px,
+            )
+        elif method == "thresholding":
+            labels = segment_thresholding(
+                height_corrected,
+                meta,
+                min_area_px=min_area_px,
             )
         elif method == "stardist":
             labels = segment_stardist(height_corrected, meta, **kwargs)
@@ -173,7 +224,8 @@ def analyze_single_file_with_grain_data(
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
-                f"Supported methods: 'classical', 'stardist', 'cellpose', 'cellulus'"
+                f"Supported methods: 'rule_based', 'watershed', 'thresholding', "
+                f"'stardist', 'cellpose', 'cellulus'"
             )
         
         num_grains = int(labels.max())

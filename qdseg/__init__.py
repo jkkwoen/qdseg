@@ -12,7 +12,9 @@ AFM 이미지에서 Quantum Dot(양자점) 검출 및 분석을 위한 순수 �
 - AFMData: XQD 파일 로드 및 데이터 접근
 - corrections: 데이터 보정 (flat, baseline 등)
 - segmentation: 세그멘테이션 알고리즘
-  - segment_rule_based: Classical (Watershed 기반)
+  - segment_rule_based: Otsu + Distance + DBSCAN + Voronoi (권장)
+  - segment_watershed: Watershed 기반
+  - segment_thresholding: Thresholding 기반
   - segment_stardist: StarDist (TensorFlow)
   - segment_cellpose: CellPose (PyTorch)
   - segment_cellulus: Cellulus (PyTorch, 학습 필요)
@@ -27,18 +29,18 @@ GPU 가속 (환경에 따라 자동 감지):
 
 사용 예시:
     >>> from qdseg import AFMData, segment_rule_based, calculate_grain_statistics
-    >>> 
+    >>>
     >>> # 1. 데이터 로드
     >>> data = AFMData("path/to/file.xqd")
-    >>> 
+    >>>
     >>> # 2. 보정 적용
     >>> data.first_correction().second_correction().third_correction()
     >>> data.align_rows(method='median')  # Scan Line Artefacts 보정 (flat 전)
     >>> data.flat_correction("line_by_line").baseline_correction("min_to_zero")
-    >>> 
+    >>>
     >>> # 3. 세그멘테이션
     >>> labels = segment_rule_based(data.get_data(), data.get_meta())
-    >>> 
+    >>>
     >>> # 4. 통계 계산
     >>> stats = calculate_grain_statistics(labels, data.get_data(), data.get_meta())
     >>> print(f"Found {stats['num_grains']} quantum dots")
@@ -47,6 +49,8 @@ GPU 가속 (환경에 따라 자동 감지):
 # Segmentation functions
 from .segmentation import (
     segment_rule_based,
+    segment_watershed,
+    segment_thresholding,
     segment_stardist,
     segment_cellpose,
     segment_cellulus,
@@ -86,11 +90,13 @@ from .training import (
     setup_environment,
 )
 
-__version__ = "0.2.4"
+__version__ = "0.3.0"
 
 __all__ = [
     # Segmentation
     "segment_rule_based",
+    "segment_watershed",
+    "segment_thresholding",
     "segment_stardist",
     "segment_cellpose",
     "segment_cellulus",
