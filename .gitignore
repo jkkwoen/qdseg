@@ -31,6 +31,14 @@ Thumbs.db
 *.log
 var/
 
+# Large test/model data
+tests/model_data/
+tests/output_data/
+
+# Benchmark artifacts
+results_*.json
+constraints-gpu.txt
+
 # Test output images (development artifacts)
 adaptive_threshold_comparison.png
 aggressive_separation_test.png

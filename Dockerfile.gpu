@@ -1,0 +1,30 @@
+# qdseg GPU Dockerfile for Blackwell (sm_120) GPUs
+# Base: NGC TensorFlow 2.17 + CUDA 12.8 (only image with working Blackwell PTX)
+#
+# Build:  docker build -f Dockerfile.gpu -t qdseg-gpu .
+# Run:    docker run --rm --gpus all -v /path/to/data:/data qdseg-gpu \
+#           python3 -c "from qdseg import analyze_grains; ..."
+
+FROM nvcr.io/nvidia/tensorflow:25.02-tf2-py3
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Pin versions compatible with NGC TF 2.17 base
+COPY constraints-gpu.txt /app/
+RUN pip install --no-cache-dir -c constraints-gpu.txt \
+    stardist==0.9.2 \
+    cellpose==4.0.8 \
+    scikit-image==0.26.0 \
+    scikit-learn==1.8.0 \
+    scipy==1.17.0
+
+# Install qdseg
+COPY . /app/qdseg_src
+RUN pip install --no-cache-dir -c constraints-gpu.txt /app/qdseg_src
+
+ENV MPLCONFIGDIR=/tmp/matplotlib_cache
+ENV PYTHONUNBUFFERED=1
