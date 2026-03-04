@@ -193,6 +193,7 @@ print_gpu_info()
 | `[stardist]` | `stardist >= 0.8`, `tensorflow >= 2.10` |
 | `[cellpose]` | `cellpose >= 4.0` |
 | `[cellulus]` | `torch >= 2.0`, `zarr >= 2.16`, `tqdm >= 4.65` |
+| `[mac-gpu]` | `tensorflow < 2.19`, `tensorflow-metal`, `stardist`, `cellpose` |
 | `[training]` | above + `python-dotenv >= 1.0` |
 | `[all]` | all of the above |
 
