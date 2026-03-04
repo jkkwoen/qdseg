@@ -1,17 +1,17 @@
 """
-Grain Analyzer 학습 모듈
+Grain Analyzer Training Module
 
-세그멘테이션 모델 학습을 위한 서브패키지입니다.
+Sub-package for training segmentation models.
 
-지원 모델:
-- Cellulus: 비지도 학습 기반 인스턴스 세그멘테이션 (레이블 불필요)
-- StarDist: Star-convex polygon detection (레이블 필요, 지도 학습)
-- Cellpose: Gradient flow 기반 세그멘테이션 (레이블 필요, 지도 학습)
+Supported models:
+- Cellulus: Unsupervised instance segmentation (no labels required)
+- StarDist: Star-convex polygon detection (labels required, supervised learning)
+- Cellpose: Gradient flow-based segmentation (labels required, supervised learning)
 
-사용법:
-    # Cellulus (비지도 학습 - 레이블 불필요)
+Usage:
+    # Cellulus (unsupervised - no labels required)
     from grain_analyzer.training import CellulusTrainer, TrainingConfig
-    
+
     config = TrainingConfig(
         num_epochs=10000,
         batch_size=16,
@@ -22,23 +22,23 @@ Grain Analyzer 학습 모듈
     images = load_afm_data(config.data_dir)
     zarr_path = trainer.prepare_data(images, for_official=True)
     checkpoint_path = trainer.train_official(zarr_path)
-    
-    # StarDist (지도 학습 - 레이블 필요)
+
+    # StarDist (supervised - labels required)
     from grain_analyzer.training import StarDistTrainer, StarDistConfig
-    
+
     config = StarDistConfig(
-        data_dir='./labeled_data',  # images/, masks/ 폴더 포함
+        data_dir='./labeled_data',  # contains images/, masks/ folders
         output_dir='./models/stardist',
         epochs=100,
     )
     trainer = StarDistTrainer(config)
     model_path = trainer.train()
-    
-    # Cellpose (지도 학습 - 레이블 필요)
+
+    # Cellpose (supervised - labels required)
     from grain_analyzer.training import CellposeTrainer, CellposeConfig
-    
+
     config = CellposeConfig(
-        data_dir='./labeled_data',  # images/, masks/ 폴더 포함
+        data_dir='./labeled_data',  # contains images/, masks/ folders
         output_dir='./models/cellpose',
         n_epochs=100,
     )
@@ -46,7 +46,7 @@ Grain Analyzer 학습 모듈
     model_path = trainer.train()
 """
 
-# Cellulus (비지도 학습)
+# Cellulus (unsupervised)
 from .cellulus_trainer import (
     TrainingConfig,
     CellulusTrainer,
@@ -57,14 +57,14 @@ from .cellulus_trainer import (
     setup_environment,
 )
 
-# StarDist (지도 학습)
+# StarDist (supervised)
 from .stardist_trainer import (
     StarDistConfig,
     StarDistTrainer,
     create_labeled_data_from_rule_based as create_stardist_labels,
 )
 
-# Cellpose (지도 학습)
+# Cellpose (supervised)
 from .cellpose_trainer import (
     CellposeConfig,
     CellposeTrainer,

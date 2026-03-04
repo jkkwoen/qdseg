@@ -1,7 +1,7 @@
 """
 XQD/XQF IO utilities
 --------------------
-헤더 해석, RAW 로드, 높이(nm) 변환 등 입출력 전용 기능을 제공합니다.
+Provides I/O functions including header parsing, RAW loading, and height (nm) conversion.
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ def _read_from_header(buf: bytes, key: str):
 
 
 def _resolve_dimensions(header: bytes, path: Path | str | None = None) -> Tuple[int, int]:
-    """헤더와(선택적으로) 파일 크기를 이용해 일관된 (xres, yres)를 산출한다.
+    """Determine consistent (xres, yres) using the header and (optionally) file size.
 
-    - 기본 xres: 0x0056, yres: 0x057C
-    - 대체 xres 후보: 0x057A (일부 파일에서 실제 xres가 여기에 존재)
-    - 파일 크기 기반 RAW 픽셀 수 검증: (filesize - HDR_SIZE) / 2
+    - Primary xres: 0x0056, yres: 0x057C
+    - Alternative xres candidate: 0x057A (some files store the actual xres here)
+    - File-size-based RAW pixel count validation: (filesize - HDR_SIZE) / 2
     """
     primary_xres = _read_from_header(header, 'xres')
     yres = _read_from_header(header, 'yres')
@@ -78,7 +78,7 @@ def _resolve_dimensions(header: bytes, path: Path | str | None = None) -> Tuple[
 
 def read_xqd_header(path: str | Path, *, processed: bool = True) -> Dict:
     """
-    XQD/XQF 헤더를 읽어 dict로 반환 (nm 기준)
+    Read the XQD/XQF header and return it as a dict (in nm units).
     """
     p = Path(path)
     with p.open('rb') as f:
@@ -126,7 +126,7 @@ def read_xqd_header(path: str | Path, *, processed: bool = True) -> Dict:
 
 def read_xqd_raw(path: str | Path) -> "numpy.ndarray":
     """
-    헤더 이후의 RAW 카운트 이미지를 읽어 반환 (dtype=uint16, shape=(yres, xres))
+    Read the RAW count image after the header and return it (dtype=uint16, shape=(yres, xres)).
     """
     import numpy as np  # Lazy import to avoid numpy dependency when reading header only
     p = Path(path)
@@ -140,7 +140,7 @@ def read_xqd_raw(path: str | Path) -> "numpy.ndarray":
 
 def raw_to_height_nm(raw_counts: "numpy.ndarray", header: Dict) -> "numpy.ndarray":
     """
-    RAW 카운트를 nm 단위 높이 배열로 변환한다.
+    Convert RAW counts to a height array in nm units.
     height_nm = raw * zscale_nm_per_count + zoffset_nm
     """
     import numpy as np
@@ -151,14 +151,14 @@ def raw_to_height_nm(raw_counts: "numpy.ndarray", header: Dict) -> "numpy.ndarra
 
 def load_height_nm(path: str | Path) -> Tuple["numpy.ndarray", Dict]:
     """
-    파일로부터 높이(nm) 배열과 헤더를 함께 로드한다.
-    Y축을 뒤집어서 반환한다 (flipud).
+    Load the height (nm) array and header together from a file.
+    Returns the array with the Y-axis flipped (flipud).
     """
     header = read_xqd_header(path, processed=True)
     raw = read_xqd_raw(path)
     height_nm = raw_to_height_nm(raw, header)
     
-    # Y축을 뒤집기 (위아래 반전)
+    # Flip the Y-axis (upside-down inversion)
     import numpy as np
     height_nm = np.flipud(height_nm)
     

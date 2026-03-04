@@ -1,7 +1,7 @@
 """
 Utility functions for grain analysis
 
-GPU/Device 자동 감지 유틸리티 포함:
+Includes GPU/Device auto-detection utilities:
 - CUDA (NVIDIA GPU)
 - MPS (Apple Silicon)
 - Metal (TensorFlow on Apple Silicon)
@@ -16,95 +16,95 @@ from .corrections import AFMCorrections
 
 
 # ============================================================
-# GPU/Device 자동 감지 유틸리티
+# GPU/Device auto-detection utilities
 # ============================================================
 
 def setup_gpu_environment():
     """
-    GPU 환경 초기화 및 최적화 설정
-    
-    Apple Silicon MPS의 경우 메모리 설정 최적화
-    프로그램 시작 시 한 번 호출 권장
+    Initialize and optimize GPU environment settings.
+
+    Optimizes memory settings for Apple Silicon MPS.
+    Recommended to call once at program startup.
     """
-    # TensorFlow 로그 레벨 조정 (불필요한 경고 숨김)
+    # Adjust TensorFlow log level (suppress unnecessary warnings)
     os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')
-    
-    # PyTorch MPS fallback 경고 숨김
+
+    # Suppress PyTorch MPS fallback warnings
     warnings.filterwarnings('ignore', message='.*MPS.*')
     warnings.filterwarnings('ignore', message='.*channels deprecated.*')
 
 
 def get_torch_device(verbose: bool = True) -> "torch.device":
     """
-    PyTorch용 최적 디바이스 자동 감지 (Cellpose용)
-    
-    우선순위: CUDA > MPS > CPU
-    
+    Auto-detect the optimal device for PyTorch (for Cellpose).
+
+    Priority: CUDA > MPS > CPU
+
     Parameters
     ----------
     verbose : bool
-        디바이스 정보 출력 여부 (default: True)
-    
+        Whether to print device information (default: True).
+
     Returns
     -------
     torch.device
-        사용할 디바이스
-    
+        The device to use.
+
     Examples
     --------
     >>> device = get_torch_device()
-    ✓ Apple Silicon MPS 가속 사용
+    ✓ Using Apple Silicon MPS acceleration
     >>> device
     device(type='mps')
     """
     try:
         import torch
     except ImportError:
-        raise ImportError("PyTorch가 설치되지 않았습니다. 설치: pip install torch")
+        raise ImportError("PyTorch is not installed. Install with: pip install torch")
     
     if torch.cuda.is_available():
         device = torch.device('cuda')
         if verbose:
             device_name = torch.cuda.get_device_name(0)
-            print(f"   ✓ CUDA GPU 감지: {device_name}")
+            print(f"   ✓ CUDA GPU detected: {device_name}")
         return device
     
     elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         device = torch.device('mps')
         if verbose:
-            print("   ✓ Apple Silicon MPS 가속 사용")
+            print("   ✓ Using Apple Silicon MPS acceleration")
         return device
     
     else:
         if verbose:
-            print("   ⚠️ GPU를 찾을 수 없음, CPU 모드로 실행")
+            print("   ⚠️ No GPU found, running in CPU mode")
         return torch.device('cpu')
 
 
 def check_tensorflow_gpu(verbose: bool = True) -> Tuple[bool, str]:
     """
-    TensorFlow GPU 가속 상태 확인 (StarDist용)
-    
+    Check TensorFlow GPU acceleration status (for StarDist).
+
     Parameters
     ----------
     verbose : bool
-        상태 메시지 출력 여부 (default: True)
-    
+        Whether to print status messages (default: True).
+
     Returns
     -------
     Tuple[bool, str]
-        (GPU 사용 가능 여부, 설명 메시지)
-    
+        (whether GPU is available, description message).
+
     Examples
     --------
     >>> gpu_available, msg = check_tensorflow_gpu()
     >>> print(msg)
-    ✓ TensorFlow Metal GPU 사용 (Apple Silicon)
+    ✓ Using TensorFlow Metal GPU (Apple Silicon)
     """
     try:
         import tensorflow as tf
     except ImportError:
-        msg = "⚠️ TensorFlow가 설치되지 않음"
+        msg = "⚠️ TensorFlow is not installed"
         if verbose:
             print(f"   {msg}")
         return False, msg
@@ -112,36 +112,36 @@ def check_tensorflow_gpu(verbose: bool = True) -> Tuple[bool, str]:
     gpus = tf.config.list_physical_devices('GPU')
     
     if gpus:
-        # GPU 메모리 증가 허용 (OOM 방지)
+        # Allow GPU memory growth (prevent OOM)
         for gpu in gpus:
             try:
                 tf.config.experimental.set_memory_growth(gpu, True)
             except RuntimeError:
                 pass
         
-        # Metal (Apple Silicon) vs CUDA 구분
+        # Distinguish between Metal (Apple Silicon) and CUDA
         gpu_name = gpus[0].name if gpus else "Unknown"
         
-        # Apple Silicon Metal 감지
+        # Detect Apple Silicon Metal
         try:
-            # tensorflow-metal이 설치되어 있으면 Metal GPU로 인식
+            # Recognized as Metal GPU if tensorflow-metal is installed
             if any('GPU' in str(gpu) for gpu in gpus):
-                # macOS에서 실행 중인지 확인
+                # Check if running on macOS
                 import platform
                 if platform.system() == 'Darwin' and platform.processor() == 'arm':
-                    msg = "✓ TensorFlow Metal GPU 사용 (Apple Silicon)"
+                    msg = "✓ Using TensorFlow Metal GPU (Apple Silicon)"
                 else:
-                    msg = f"✓ TensorFlow CUDA GPU 사용: {gpu_name}"
+                    msg = f"✓ Using TensorFlow CUDA GPU: {gpu_name}"
             else:
-                msg = f"✓ TensorFlow GPU 사용: {gpu_name}"
+                msg = f"✓ Using TensorFlow GPU: {gpu_name}"
         except Exception:
-            msg = f"✓ TensorFlow GPU 사용: {gpu_name}"
-        
+            msg = f"✓ Using TensorFlow GPU: {gpu_name}"
+
         if verbose:
             print(f"   {msg}")
         return True, msg
     else:
-        msg = "⚠️ TensorFlow GPU를 찾을 수 없음, CPU 모드로 실행"
+        msg = "⚠️ No TensorFlow GPU found, running in CPU mode"
         if verbose:
             print(f"   {msg}")
         return False, msg

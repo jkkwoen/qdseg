@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-QDSeg 모델 학습 파이프라인 (Wrapper)
+QDSeg Model Training Pipeline (Wrapper)
 
-이 파일은 하위 호환성을 위해 유지됩니다.
-실제 구현은 qdseg.training 모듈에 있습니다.
+This file is maintained for backward compatibility.
+The actual implementation is in the qdseg.training module.
 
-사용법:
-    # CLI로 실행
+Usage:
+    # Run from CLI
     python -m qdseg.train_model
-    
-    # Python에서 import
+
+    # Import from Python
     from qdseg.training import CellulusTrainer, TrainingConfig
 """
 
-# 모든 내용을 training.cellulus_trainer에서 가져옴
+# Import everything from training.cellulus_trainer
 from .training.cellulus_trainer import *
 from .training.cellulus_trainer import main
 

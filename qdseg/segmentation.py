@@ -1,11 +1,11 @@
 """
 Grain Segmentation Methods
 
-각 함수는 동일한 입출력 형식을 따름:
+Each function follows the same input/output format:
     Input: height (2D array), meta (dict)
     Output: labels (2D int array, 0=background, 1,2,3...=grains)
 
-사용 예시:
+Usage examples:
     >>> from qdseg.segmentation import segment_rule_based, segment_watershed, segment_stardist
     >>> labels = segment_rule_based(height, meta)
     >>> labels = segment_watershed(height, meta)
@@ -170,7 +170,7 @@ def segment_rule_based(
             rep_coords.append(coords[best])
         rep_coords = np.array(rep_coords)
     except ImportError:
-        # sklearn 없으면 모든 좌표 사용
+        # If sklearn is not available, use all coordinates
         rep_coords = coords
 
     # 4. Voronoi segmentation from markers
@@ -188,13 +188,13 @@ def segment_watershed(
     min_area_px: int = 20
 ) -> np.ndarray:
     """
-    Watershed 기반 grain segmentation
+    Watershed-based grain segmentation
 
     Steps:
-    1. Gaussian blur로 노이즈 제거
-    2. Local maxima를 marker로 검출
-    3. Watershed 알고리즘 적용
-    4. 작은 영역 필터링
+    1. Remove noise with Gaussian blur
+    2. Detect local maxima as markers
+    3. Apply watershed algorithm
+    4. Filter small regions
 
     Parameters
     ----------
@@ -205,9 +205,9 @@ def segment_watershed(
     gaussian_sigma : float
         Gaussian blur sigma (default: 1.0)
     min_distance : int
-        Local maxima 간 최소 거리 (픽셀) (default: 5)
+        Minimum distance between local maxima in pixels (default: 5)
     min_area_px : int
-        최소 grain 면적 (픽셀) (default: 20)
+        Minimum grain area in pixels (default: 20)
 
     Returns
     -------
@@ -221,30 +221,30 @@ def segment_watershed(
     """
     from skimage import filters, morphology, segmentation
 
-    # 1. Gaussian blur로 노이즈 제거
+    # 1. Remove noise with Gaussian blur
     height_smoothed = filters.gaussian(height, sigma=gaussian_sigma, preserve_range=True)
 
-    # 2. Local maxima 검출 (grain peak)
-    # scikit-image 0.18+ 호환: indices 파라미터 제거됨
+    # 2. Detect local maxima (grain peaks)
+    # scikit-image 0.18+ compatible: indices parameter removed
     local_max_coords = peak_local_max(
         height_smoothed,
         min_distance=min_distance,
     )
     
-    # 좌표를 boolean mask로 변환
+    # Convert coordinates to boolean mask
     local_max = np.zeros(height_smoothed.shape, dtype=bool)
     if len(local_max_coords) > 0:
         local_max[tuple(local_max_coords.T)] = True
 
-    # 3. Marker 생성
+    # 3. Create markers
     markers = ndi.label(local_max)[0]
 
     # 4. Watershed segmentation
-    # Watershed는 보통 gradient 이미지에서 수행
+    # Watershed is typically performed on a gradient image
     gradient = filters.sobel(height_smoothed)
     labeled_image = segmentation.watershed(gradient, markers)
 
-    # 5. 작은 영역 제거
+    # 5. Remove small regions
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", FutureWarning)
         labeled_image = morphology.remove_small_objects(
@@ -252,7 +252,7 @@ def segment_watershed(
             min_size=min_area_px
         )
 
-    # 6. Label 재정렬 (1부터 연속된 숫자로)
+    # 6. Relabel sequentially (starting from 1)
     labeled_image = morphology.label(labeled_image > 0)
 
     return labeled_image.astype(np.int32)
@@ -270,21 +270,21 @@ def segment_thresholding(
     min_distance: int = 5
 ) -> np.ndarray:
     """
-    Thresholding 기반 grain segmentation
+    Thresholding-based grain segmentation
 
     Steps (use_distance_separation=False):
-    1. Threshold 결정 (Otsu, Isodata, Manual 등)
-    2. 이진화 (Binary thresholding)
-    3. Morphological closing (구멍 메우기)
+    1. Determine threshold (Otsu, Isodata, Manual, etc.)
+    2. Binary thresholding
+    3. Morphological closing (fill holes)
     4. Connected component labeling
-    5. 작은 영역 필터링
+    5. Filter small regions
 
     Steps (use_distance_separation=True):
-    1. Threshold 결정 및 이진화
-    2. Distance Transform 계산
-    3. Local peak 검출
-    4. Watershed로 붙어있는 grain 분리
-    5. 작은 영역 필터링
+    1. Determine threshold and binarize
+    2. Compute Distance Transform
+    3. Detect local peaks
+    4. Separate touching grains with Watershed
+    5. Filter small regions
 
     Parameters
     ----------
@@ -304,13 +304,13 @@ def segment_thresholding(
     threshold_value : float, optional
         Manual threshold value (nm) (used if method='manual')
     min_area_px : int
-        최소 grain 면적 (픽셀) (default: 20)
+        Minimum grain area in pixels (default: 20)
     closing_size : int
         Morphological closing kernel size (default: 3)
     use_distance_separation : bool
-        Distance Transform + Local Peak으로 붙어있는 grain 분리 여부 (default: False)
+        Whether to separate touching grains using Distance Transform + Local Peaks (default: False)
     min_distance : int
-        Local peak 간 최소 거리 (픽셀, use_distance_separation=True일 때만 사용) (default: 5)
+        Minimum distance between local peaks in pixels (only used when use_distance_separation=True) (default: 5)
 
     Returns
     -------
@@ -326,7 +326,7 @@ def segment_thresholding(
     """
     from skimage import filters, morphology, segmentation
 
-    # 1. Threshold 결정
+    # 1. Determine threshold
     if threshold_method == 'otsu':
         threshold = filters.threshold_otsu(height)
     elif threshold_method == 'isodata':
@@ -349,41 +349,41 @@ def segment_thresholding(
             f"Supported methods: 'otsu', 'isodata', 'li', 'triangle', 'yen', 'minimum', 'manual'"
         )
 
-    # 2. 이진화
+    # 2. Binarize
     binary = height > threshold
 
-    # 3. Morphological closing (작은 구멍 메우기)
+    # 3. Morphological closing (fill small holes)
     if closing_size > 0:
         selem = morphology.disk(closing_size)
         binary = morphology.closing(binary, selem)
 
-    # 4. Distance Transform + Local Peak로 분리 (옵션)
+    # 4. Separate using Distance Transform + Local Peaks (optional)
     if use_distance_separation:
-        # Distance Transform 계산
+        # Compute Distance Transform
         distance = ndi.distance_transform_edt(binary)
 
-        # Local maxima 검출
+        # Detect local maxima
         local_max_coords = peak_local_max(
             distance,
             min_distance=min_distance,
             labels=binary,
         )
 
-        # 좌표를 boolean mask로 변환
+        # Convert coordinates to boolean mask
         local_max = np.zeros(binary.shape, dtype=bool)
         if len(local_max_coords) > 0:
             local_max[tuple(local_max_coords.T)] = True
 
-        # Marker 생성
+        # Create markers
         markers = ndi.label(local_max)[0]
 
-        # Watershed로 분리
+        # Separate with Watershed
         labeled_image = segmentation.watershed(-distance, markers, mask=binary)
     else:
-        # 4. Connected component labeling (기본)
+        # 4. Connected component labeling (default)
         labeled_image = morphology.label(binary)
 
-    # 5. 작은 영역 제거
+    # 5. Remove small regions
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", FutureWarning)
         labeled_image = morphology.remove_small_objects(
@@ -391,7 +391,7 @@ def segment_thresholding(
             min_size=min_area_px
         )
 
-    # 6. Label 재정렬
+    # 6. Relabel sequentially
     labeled_image = morphology.label(labeled_image > 0)
 
     return labeled_image.astype(np.int32)
@@ -414,10 +414,10 @@ def segment_stardist(
     Uses star-convex polygon detection for grain segmentation.
     Requires stardist and tensorflow to be installed.
     
-    GPU 가속은 환경에 따라 자동 감지됩니다:
-    - NVIDIA GPU: CUDA (tensorflow-gpu 필요)
-    - Apple Silicon: Metal (tensorflow-metal 필요)
-    - 그 외: CPU
+    GPU acceleration is auto-detected based on the environment:
+    - NVIDIA GPU: CUDA (requires tensorflow-gpu)
+    - Apple Silicon: Metal (requires tensorflow-metal)
+    - Otherwise: CPU
     
     Parameters
     ----------
@@ -470,7 +470,7 @@ def segment_stardist(
     ----------
     StarDist: https://github.com/stardist/stardist
     """
-    # Lazy import - StarDist 미설치 시 다른 함수는 사용 가능
+    # Lazy import - other functions remain available if StarDist is not installed
     try:
         from stardist.models import StarDist2D
     except ImportError:
@@ -762,7 +762,7 @@ def segment_cellulus(
     gpu: bool = True,
     device: Optional["torch.device"] = None,
     use_official: bool = True,
-    # 공식 Cellulus 파라미터
+    # Official Cellulus parameters
     num_fmaps: int = 24,
     fmap_inc_factor: int = 3,
     p_salt_pepper: float = 0.01,
@@ -776,17 +776,17 @@ def segment_cellulus(
     """
     Cellulus-based segmentation using unsupervised deep learning
     
-    Cellulus는 비지도 학습 기반 인스턴스 세그멘테이션 방법입니다.
-    Object-centric embeddings를 학습하여 라벨 없이 세그멘테이션을 수행합니다.
-    
-    이 함수는 두 가지 모델 형식을 지원합니다:
-    1. 공식 Cellulus 모델 (use_official=True, cellulus 패키지 필요)
-    2. 간소화된 모델 (use_official=False, PyTorch만 필요)
-    
-    GPU 가속은 환경에 따라 자동 감지됩니다:
+    Cellulus is an unsupervised learning-based instance segmentation method.
+    It learns object-centric embeddings to perform segmentation without labels.
+
+    This function supports two model formats:
+    1. Official Cellulus model (use_official=True, requires cellulus package)
+    2. Simplified model (use_official=False, requires PyTorch only)
+
+    GPU acceleration is auto-detected based on the environment:
     - NVIDIA GPU: CUDA
     - Apple Silicon: MPS
-    - 그 외: CPU
+    - Otherwise: CPU
     
     Parameters
     ----------
@@ -861,12 +861,12 @@ def segment_cellulus(
     
     if checkpoint_path is None and model_path is None:
         raise ValueError(
-            "Cellulus는 학습된 모델이 필요합니다. "
-            "checkpoint_path를 지정하세요. "
-            "모델 학습: python train_model.py"
+            "Cellulus requires a trained model. "
+            "Please specify checkpoint_path. "
+            "Train a model with: python train_model.py"
         )
     
-    # 디바이스 자동 감지
+    # Auto-detect device
     if device is None and gpu:
         try:
             from .utils import setup_gpu_environment, get_torch_device
@@ -888,7 +888,7 @@ def segment_cellulus(
     else:
         img_norm = height.astype(np.float32)
     
-    # 공식 Cellulus 시도
+    # Try official Cellulus
     if use_official:
         try:
             device_str = str(device) if device else ("mps" if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() else "cuda:0" if torch.cuda.is_available() else "cpu")
@@ -910,20 +910,20 @@ def segment_cellulus(
             if labels is not None:
                 return labels.astype(np.int32)
         except ImportError:
-            pass  # 공식 Cellulus 없으면 간소화 모델 시도
+            pass  # If official Cellulus not available, try simplified model
         except Exception as e:
             import traceback
             traceback.print_exc()
-            pass  # 실패하면 간소화 모델 시도
+            pass  # On failure, try simplified model
     
-    # 간소화된 모델 시도 (PyTorch 체크포인트)
+    # Try simplified model (PyTorch checkpoint)
     labels = _segment_with_simple_cellulus(img_norm, checkpoint_path, device)
     if labels is not None:
         return labels.astype(np.int32)
     
     raise RuntimeError(
-        "모델을 로드할 수 없습니다. "
-        "python train_model.py로 모델을 학습하세요."
+        "Failed to load model. "
+        "Train a model with: python train_model.py"
     )
 
 
@@ -947,53 +947,53 @@ def _segment_with_official_cellulus(
     min_size: Optional[int] = None,
 ) -> Optional[np.ndarray]:
     """
-    공식 Cellulus CLI를 사용한 세그멘테이션
-    
-    공식 Cellulus의 infer 파이프라인을 호출합니다:
-    1. 입력 이미지를 zarr 형식으로 변환
-    2. ExperimentConfig 생성
-    3. infer_experiment 호출 (predict → detect → segment)
-    4. 결과 zarr에서 segmentation 로드
-    
+    Segmentation using the official Cellulus CLI.
+
+    Calls the official Cellulus infer pipeline:
+    1. Convert input image to zarr format
+    2. Create ExperimentConfig
+    3. Call infer_experiment (predict -> detect -> segment)
+    4. Load segmentation from result zarr
+
     Parameters
     ----------
     img_norm : np.ndarray
-        정규화된 입력 이미지 (H, W), 값 범위 [0, 1]
+        Normalized input image (H, W), value range [0, 1]
     checkpoint_path : str
-        학습된 Cellulus 모델 체크포인트 경로
+        Path to trained Cellulus model checkpoint
     device : str
-        디바이스 ("cuda:0", "mps", "cpu")
+        Device ("cuda:0", "mps", "cpu")
     num_fmaps : int
-        첫 번째 레이어의 feature map 개수
+        Number of feature maps in the first layer
     fmap_inc_factor : int
-        레이어 간 feature map 증가 배수
+        Feature map increase factor between layers
     crop_size : int
-        추론에 사용할 crop 크기
+        Crop size used for inference
     p_salt_pepper : float
-        Salt-pepper noise 비율
+        Salt-pepper noise probability
     num_infer_iterations : int
-        추론 반복 횟수
+        Number of inference iterations
     bandwidth : float, optional
-        MeanShift bandwidth (None이면 자동)
+        MeanShift bandwidth (auto-detected if None)
     num_bandwidths : int
-        사용할 bandwidth 개수
+        Number of bandwidths to use
     reduction_probability : float
-        클러스터링에 사용할 픽셀 비율
+        Fraction of pixels used for clustering
     clustering : str
-        클러스터링 방법 ("meanshift" 또는 "greedy")
+        Clustering method ("meanshift" or "greedy")
     post_processing : str
-        후처리 방법 ("cell" 또는 "nucleus")
+        Post-processing method ("cell" or "nucleus")
     grow_distance : int
-        Morphological grow 거리
+        Morphological grow distance
     shrink_distance : int
-        Morphological shrink 거리
+        Morphological shrink distance
     min_size : int, optional
-        최소 객체 크기 (None이면 필터링 안 함)
-    
+        Minimum object size (no filtering if None)
+
     Returns
     -------
     labels : np.ndarray or None
-        세그멘테이션 결과 (H, W), 실패시 None
+        Segmentation result (H, W), None on failure
     """
     import os
     import tempfile
@@ -1007,32 +1007,32 @@ def _segment_with_official_cellulus(
         return None
     
     try:
-        # 입력 형태 확인 및 변환
+        # Verify and reshape input
         # (H, W) -> (1, 1, H, W)
         images = img_norm[np.newaxis, np.newaxis, ...].astype(np.float32)
         
-        # 모델 경로의 부모 폴더를 작업 디렉토리로 사용
+        # Use parent directory of model path as working directory
         checkpoint_path_abs = os.path.abspath(checkpoint_path)
-        model_dir = os.path.dirname(os.path.dirname(checkpoint_path_abs))  # models/ 의 부모
+        model_dir = os.path.dirname(os.path.dirname(checkpoint_path_abs))  # parent of models/
         
-        # 임시 디렉토리 생성 (모델 폴더 내)
+        # Create temporary directory (inside model folder)
         temp_dir = tempfile.mkdtemp(prefix="cellulus_infer_", dir=model_dir)
         zarr_path = os.path.join(temp_dir, "data.zarr")
         
-        # 모델 체크포인트의 상대 경로 (작업 디렉토리 기준)
+        # Relative path of model checkpoint (relative to working directory)
         checkpoint_rel = os.path.relpath(checkpoint_path_abs, model_dir)
         
         try:
-            # zarr 파일 생성
+            # Create zarr file
             root = zarr.open(zarr_path, mode='w')
             root['train/raw'] = images
             root['train/raw'].attrs['resolution'] = (1, 1)
             root['train/raw'].attrs['axis_names'] = ('s', 'c', 'y', 'x')
             
-            # zarr 경로도 상대 경로로
+            # Convert zarr path to relative path
             zarr_rel = os.path.relpath(zarr_path, model_dir)
             
-            # TOML 설정 생성 (dict)
+            # Create TOML configuration (dict)
             config = {
                 'normalization_factor': 1.0,
                 'model_config': {
@@ -1077,18 +1077,18 @@ def _segment_with_official_cellulus(
             if min_size is not None:
                 config['inference_config']['min_size'] = min_size
             
-            # 작업 디렉토리 변경 후 Cellulus 실행
+            # Change working directory and run Cellulus
             original_cwd = os.getcwd()
             os.chdir(model_dir)
             
             try:
-                # ExperimentConfig 로드 및 추론 실행
+                # Load ExperimentConfig and run inference
                 experiment_config = ExperimentConfig(**config)
                 infer_experiment(experiment_config)
             finally:
                 os.chdir(original_cwd)
             
-            # 결과 로드
+            # Load results
             root = zarr.open(zarr_path, mode='r')
             labels = np.array(root['segmentation'][:])  # (1, 1, H, W)
             labels = labels[0, 0, :, :]  # (H, W)
@@ -1110,9 +1110,9 @@ def _segment_with_simple_cellulus(
     device: "torch.device",
 ) -> Optional[np.ndarray]:
     """
-    간소화된 Cellulus 모델로 세그멘테이션
-    
-    train_model.py로 학습된 간소화 모델을 사용합니다.
+    Segmentation with simplified Cellulus model.
+
+    Uses the simplified model trained with train_model.py.
     """
     import torch
     import torch.nn as nn
@@ -1121,7 +1121,7 @@ def _segment_with_simple_cellulus(
     from skimage.segmentation import watershed
     from skimage.feature import peak_local_max as plm
     
-    # 간소화된 U-Net 모델 정의
+    # Define simplified U-Net model
     class SimpleUNet(nn.Module):
         def __init__(self, in_channels=1, num_embeddings=8, num_fmaps=32):
             super().__init__()
@@ -1197,9 +1197,9 @@ def _segment_with_simple_cellulus(
 
 def _embeddings_to_labels(embeddings: np.ndarray, img: np.ndarray) -> np.ndarray:
     """
-    Object-centric embeddings를 인스턴스 라벨로 변환
-    
-    임베딩 공간에서 유사한 픽셀들을 그룹화합니다.
+    Convert object-centric embeddings to instance labels.
+
+    Groups similar pixels in embedding space.
     """
     from scipy import ndimage as ndi_local
     from skimage.segmentation import watershed
@@ -1207,35 +1207,35 @@ def _embeddings_to_labels(embeddings: np.ndarray, img: np.ndarray) -> np.ndarray
     
     c, h, w = embeddings.shape
     
-    # 임베딩 정규화
+    # Normalize embeddings
     embeddings_norm = embeddings / (np.linalg.norm(embeddings, axis=0, keepdims=True) + 1e-10)
     
-    # 각 픽셀의 임베딩 변화량 계산 (경계 검출)
+    # Compute embedding gradient for each pixel (boundary detection)
     gradient_x = np.abs(np.diff(embeddings_norm, axis=2))
     gradient_y = np.abs(np.diff(embeddings_norm, axis=1))
     
-    # 패딩
+    # Padding
     gradient_x = np.pad(gradient_x, ((0, 0), (0, 0), (0, 1)), mode='edge')
     gradient_y = np.pad(gradient_y, ((0, 0), (0, 1), (0, 0)), mode='edge')
     
-    # 경계 강도
+    # Boundary strength
     boundary = np.sqrt(np.sum(gradient_x**2, axis=0) + np.sum(gradient_y**2, axis=0))
     
-    # 경계를 기반으로 마커 생성
+    # Create markers based on boundaries
     smooth = ndi_local.gaussian_filter(1 - boundary, sigma=2)
     
-    # 로컬 맥시마 찾기
+    # Find local maxima
     coords = plm(smooth, min_distance=5, threshold_abs=0.1)
     
     if len(coords) == 0:
         return np.zeros((h, w), dtype=np.int32)
     
-    # 마커 이미지 생성
+    # Create marker image
     markers = np.zeros((h, w), dtype=np.int32)
     for i, (r, c) in enumerate(coords, start=1):
         markers[r, c] = i
     
-    # Watershed 세그멘테이션
+    # Watershed segmentation
     labels = watershed(boundary, markers)
     
     return labels.astype(np.int32)

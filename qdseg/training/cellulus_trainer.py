@@ -1,11 +1,11 @@
 """
-Cellulus 학습 모듈
+Cellulus Training Module
 
-공식 Cellulus 라이브러리를 사용한 비지도 학습 기반 세그멘테이션 모델 학습.
+Unsupervised segmentation model training using the official Cellulus library.
 
-사용법:
+Usage:
     from grain_analyzer.training import CellulusTrainer, TrainingConfig
-    
+
     config = TrainingConfig(num_epochs=10000, batch_size=16)
     trainer = CellulusTrainer(config)
     images = load_afm_data(config.data_dir)
@@ -24,67 +24,67 @@ from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 import numpy as np
 
-# .env 파일 로드
+# Load .env file
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    warnings.warn("python-dotenv가 설치되지 않았습니다. 환경변수를 사용하려면 'pip install python-dotenv'를 실행하세요.", ImportWarning)
+    warnings.warn("python-dotenv is not installed. Run 'pip install python-dotenv' to use environment variables.", ImportWarning)
     pass
 
 
 # ============================================================
-# 설정 클래스
+# Configuration class
 # ============================================================
 
 @dataclass
 class TrainingConfig:
-    """학습 설정"""
+    """Training configuration"""
     model_type: str = "cellulus"
-    use_official: bool = True  # 공식 Cellulus 사용 여부
+    use_official: bool = True  # Whether to use official Cellulus
     num_epochs: int = 10000
     batch_size: int = 4
     learning_rate: float = 1e-4
     patch_size: int = 128
-    crop_size: int = 252  # 공식 Cellulus용 crop 크기
+    crop_size: int = 252  # Crop size for official Cellulus
     num_embeddings: int = 8
     num_fmaps: int = 32
-    fmap_inc_factor: int = 3  # 공식 Cellulus용
+    fmap_inc_factor: int = 3  # For official Cellulus
     checkpoint_interval: int = 1000
     log_interval: int = 100
     
-    # 공식 Cellulus 설정
+    # Official Cellulus settings
     elastic_deform: bool = True
     control_point_spacing: int = 64
     control_point_jitter: float = 2.0
     save_best_model_every: int = 100
     
-    # 경로
+    # Paths
     data_dir: Optional[Path] = None
     output_dir: Optional[Path] = None
     
-    # GPU 설정
+    # GPU settings
     use_gpu: bool = True
     device: Optional[str] = None
     
-    # 하드웨어 최적화 설정
-    num_workers: int = -1  # -1이면 자동 감지
+    # Hardware optimization settings
+    num_workers: int = -1  # -1 for auto-detection
     prefetch_factor: int = 2
     pin_memory: bool = True
     
-    # CUDA 최적화 설정
+    # CUDA optimization settings
     use_amp: bool = True  # Automatic Mixed Precision
-    cudnn_benchmark: bool = True  # cuDNN 벤치마크 모드
+    cudnn_benchmark: bool = True  # cuDNN benchmark mode
     compile_model: bool = False  # torch.compile (PyTorch 2.0+)
     
     def __post_init__(self):
-        # 환경변수에서 기본 경로 읽기
+        # Read default paths from environment variables
         if self.data_dir is None:
             env_data_dir = os.getenv('QDSEG_DATA_DIR')
             if env_data_dir:
                 self.data_dir = Path(env_data_dir)
             else:
-                # 기본값: 프로젝트 루트 기준 상대 경로
+                # Default: relative path from project root
                 project_root = Path(__file__).parent.parent.parent
                 self.data_dir = project_root / "tests" / "input_data" / "xqd"
         
@@ -93,26 +93,26 @@ class TrainingConfig:
             if env_output_dir:
                 self.output_dir = Path(env_output_dir) / self.model_type
             else:
-                # 기본값: 프로젝트 루트 기준 상대 경로
+                # Default: relative path from project root
                 project_root = Path(__file__).parent.parent.parent
                 self.output_dir = project_root / "tests" / "model_data" / self.model_type
         
         self.data_dir = Path(self.data_dir)
         self.output_dir = Path(self.output_dir)
         
-        # num_workers 자동 설정
+        # Auto-configure num_workers
         if self.num_workers < 0:
             cpu_count = os.cpu_count() or 4
-            # CPU 코어의 절반 정도 사용 (메인 프로세스와 GPU 연산 여유)
+            # Use about half of CPU cores (leave room for main process and GPU operations)
             self.num_workers = min(cpu_count // 2, 12)
 
 
 # ============================================================
-# 유틸리티 함수
+# Utility functions
 # ============================================================
 
 def get_hardware_info() -> Dict[str, Any]:
-    """시스템 하드웨어 정보 수집"""
+    """Collect system hardware information"""
     import torch
     
     info = {
@@ -123,7 +123,7 @@ def get_hardware_info() -> Dict[str, Any]:
         'torch_version': torch.__version__,
     }
     
-    # 메모리 정보 (macOS)
+    # Memory info (macOS)
     try:
         import subprocess
         result = subprocess.run(
@@ -136,7 +136,7 @@ def get_hardware_info() -> Dict[str, Any]:
     except Exception:
         info['memory_gb'] = None
     
-    # GPU 정보
+    # GPU info
     if torch.cuda.is_available():
         info['gpu_type'] = 'cuda'
         info['gpu_name'] = torch.cuda.get_device_name(0)
@@ -144,7 +144,7 @@ def get_hardware_info() -> Dict[str, Any]:
     elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         info['gpu_type'] = 'mps'
         info['gpu_name'] = 'Apple Silicon GPU'
-        # MPS는 통합 메모리 사용
+        # MPS uses unified memory
         info['gpu_memory_gb'] = info.get('memory_gb', 'Unified Memory')
     else:
         info['gpu_type'] = 'cpu'
@@ -155,110 +155,110 @@ def get_hardware_info() -> Dict[str, Any]:
 
 
 def print_hardware_info():
-    """하드웨어 정보 출력"""
+    """Print hardware information"""
     info = get_hardware_info()
     
-    print("\n💻 하드웨어 정보:")
-    print(f"   시스템: {info['platform']}")
-    print(f"   프로세서: {info['processor']}")
-    print(f"   CPU 코어: {info['cpu_count']}개")
+    print("\n💻 Hardware Info:")
+    print(f"   System: {info['platform']}")
+    print(f"   Processor: {info['processor']}")
+    print(f"   CPU Cores: {info['cpu_count']}")
     if info.get('memory_gb'):
-        print(f"   시스템 메모리: {info['memory_gb']:.1f} GB")
+        print(f"   System Memory: {info['memory_gb']:.1f} GB")
     print(f"   Python: {info['python_version']}")
     print(f"   PyTorch: {info['torch_version']}")
     
     if info['gpu_type'] == 'cuda':
         print(f"   GPU: {info['gpu_name']} ({info['gpu_memory_gb']:.1f} GB)")
     elif info['gpu_type'] == 'mps':
-        print(f"   GPU: {info['gpu_name']} (통합 메모리)")
+        print(f"   GPU: {info['gpu_name']} (Unified Memory)")
     else:
-        print("   GPU: 사용 불가")
+        print("   GPU: Not available")
     
     return info
 
 
 def get_device(use_gpu: bool = True) -> "torch.device":
-    """최적의 디바이스 자동 감지"""
+    """Auto-detect the optimal device"""
     import torch
     
     if not use_gpu:
-        print("   ⚠️ CPU 모드로 실행")
+        print("   ⚠️ Running in CPU mode")
         return torch.device('cpu')
     
     if torch.cuda.is_available():
         device = torch.device('cuda')
-        print(f"   ✓ CUDA GPU 사용: {torch.cuda.get_device_name(0)}")
+        print(f"   ✓ Using CUDA GPU: {torch.cuda.get_device_name(0)}")
         return device
     
     if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         device = torch.device('mps')
-        print("   ✓ Apple Silicon MPS 가속 사용")
+        print("   ✓ Using Apple Silicon MPS acceleration")
         return device
     
-    print("   ⚠️ GPU를 찾을 수 없음, CPU 모드로 실행")
+    print("   ⚠️ GPU not found, running in CPU mode")
     return torch.device('cpu')
 
 
 def setup_environment(config: Optional[TrainingConfig] = None):
-    """환경 설정 - CUDA/MPS 최적화"""
+    """Environment setup - CUDA/MPS optimization"""
     import torch
     
-    # macOS에서 멀티프로세싱 시작 방법 설정 (fork 대신 spawn 사용)
+    # Set multiprocessing start method on macOS (use spawn instead of fork)
     if platform.system() == 'Darwin':
         try:
             multiprocessing.set_start_method('spawn', force=True)
         except RuntimeError:
-            pass  # 이미 설정된 경우
+            pass  # Already set
     
     # ============================================================
-    # CUDA 최적화
+    # CUDA optimization
     # ============================================================
     if torch.cuda.is_available():
-        # cuDNN 벤치마크 모드 - 입력 크기가 일정할 때 최적 알고리즘 선택
+        # cuDNN benchmark mode - selects optimal algorithm when input size is constant
         if config is None or config.cudnn_benchmark:
             torch.backends.cudnn.benchmark = True
-            print("   ✓ cuDNN benchmark 모드 활성화")
+            print("   ✓ cuDNN benchmark mode enabled")
         
-        # cuDNN deterministic 모드 (재현성 필요시)
+        # cuDNN deterministic mode (when reproducibility is needed)
         # torch.backends.cudnn.deterministic = True
         
-        # TF32 활성화 (Ampere 이상 GPU에서 성능 향상)
+        # Enable TF32 (performance improvement on Ampere+ GPUs)
         if hasattr(torch.backends.cuda, 'matmul'):
             torch.backends.cuda.matmul.allow_tf32 = True
         if hasattr(torch.backends.cudnn, 'allow_tf32'):
             torch.backends.cudnn.allow_tf32 = True
         
-        # CUDA 메모리 관리
+        # CUDA memory management
         if os.environ.get('PYTORCH_CUDA_ALLOC_CONF') is None:
-            # 메모리 분할 최적화
+            # Memory fragmentation optimization
             os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
     
     # ============================================================
-    # MPS 최적화 (Apple Silicon)
+    # MPS optimization (Apple Silicon)
     # ============================================================
     if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        # MPS 메모리 최적화 - 통합 메모리 최대 활용
+        # MPS memory optimization - maximize unified memory usage
         if os.environ.get('PYTORCH_MPS_HIGH_WATERMARK_RATIO') is None:
-            os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = '0.9'  # 90%까지 사용
+            os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = '0.9'  # Use up to 90%
         if os.environ.get('PYTORCH_MPS_LOW_WATERMARK_RATIO') is None:
             os.environ['PYTORCH_MPS_LOW_WATERMARK_RATIO'] = '0.0'
         
-        # MPS 연산 최적화
+        # MPS operation optimization
         if os.environ.get('PYTORCH_ENABLE_MPS_FALLBACK') is None:
-            os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'  # 미지원 연산은 CPU로 폴백
+            os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'  # Fallback to CPU for unsupported ops
     
-    # 경고 숨김
+    # Suppress warnings
     warnings.filterwarnings('ignore', category=DeprecationWarning)
     warnings.filterwarnings('ignore', message='.*MPS.*')
     warnings.filterwarnings('ignore', message='.*beta.*')
 
 
 def load_afm_data(data_dir: Path, target_size: int = 512) -> List[np.ndarray]:
-    """AFM XQD 파일들 로드
-    
+    """Load AFM XQD files
+
     Args:
-        data_dir: XQD 파일이 있는 디렉토리
-        target_size: 출력 이미지 크기 (정사각형, 기본값 512)
+        data_dir: Directory containing XQD files
+        target_size: Output image size (square, default 512)
     """
     from grain_analyzer import AFMData
     from skimage.transform import resize
@@ -266,9 +266,9 @@ def load_afm_data(data_dir: Path, target_size: int = 512) -> List[np.ndarray]:
     xqd_files = sorted(data_dir.glob("*.xqd"))
     
     if not xqd_files:
-        raise FileNotFoundError(f"XQD 파일을 찾을 수 없습니다: {data_dir}")
+        raise FileNotFoundError(f"No XQD files found: {data_dir}")
     
-    print(f"\n📂 {len(xqd_files)}개의 XQD 파일 발견")
+    print(f"\n📂 Found {len(xqd_files)} XQD files")
     
     images = []
     for xqd_file in xqd_files:
@@ -304,11 +304,11 @@ def load_afm_data(data_dir: Path, target_size: int = 512) -> List[np.ndarray]:
 
 
 # ============================================================
-# Cellulus 학습
+# Cellulus Training
 # ============================================================
 
 class CellulusTrainer:
-    """Cellulus 모델 학습기 (공식 및 간소화 모델 지원)"""
+    """Cellulus model trainer (supports official and simplified models)"""
     
     def __init__(self, config: TrainingConfig):
         self.config = config
@@ -316,24 +316,24 @@ class CellulusTrainer:
         self.model = None
         self.optimizer = None
         self.scaler = None  # AMP GradScaler
-        self.use_amp = False  # AMP 사용 여부
+        self.use_amp = False  # Whether to use AMP
         
     def prepare_data(self, images: List[np.ndarray], for_official: bool = False) -> Path:
-        """데이터를 Zarr 형식으로 준비
-        
+        """Prepare data in Zarr format
+
         Args:
-            images: 학습 이미지 리스트
-            for_official: True이면 공식 Cellulus 형식 (N, 1, H, W), False이면 (N, H, W)
+            images: List of training images
+            for_official: If True, use official Cellulus format (N, 1, H, W); otherwise (N, H, W)
         """
         import zarr
         
         zarr_path = self.config.output_dir / "afm_grains.zarr"
         
-        print(f"\n📦 Zarr 데이터셋 생성: {zarr_path}")
+        print(f"\n📦 Creating Zarr dataset: {zarr_path}")
         
         stacked = np.stack(images, axis=0).astype(np.float32)
         
-        # 공식 Cellulus는 (N, 1, H, W) 형식 필요
+        # Official Cellulus requires (N, 1, H, W) format
         if for_official:
             stacked = stacked[:, np.newaxis, :, :]  # (N, H, W) -> (N, 1, H, W)
         
@@ -350,7 +350,7 @@ class CellulusTrainer:
             train_group.create_array('raw', data=train_data, chunks=chunk_size)
             test_group.create_array('raw', data=test_data, chunks=chunk_size)
             
-            # 공식 Cellulus용 메타데이터
+            # Metadata for official Cellulus
             if for_official:
                 root['train/raw'].attrs['resolution'] = (1, 1)
                 root['train/raw'].attrs['axis_names'] = ('s', 'c', 'y', 'x')
@@ -369,12 +369,12 @@ class CellulusTrainer:
         return zarr_path
     
     def train_official(self, zarr_path: Path) -> Path:
-        """공식 Cellulus 학습
-        
-        cellulus.cli.train_experiment를 사용하여 학습합니다.
-        
+        """Official Cellulus training
+
+        Trains using cellulus.cli.train_experiment.
+
         Returns:
-            checkpoint_path: 학습된 모델 체크포인트 경로
+            checkpoint_path: Path to the trained model checkpoint
         """
         import os
         import torch
@@ -383,13 +383,13 @@ class CellulusTrainer:
             from cellulus.cli import ExperimentConfig, train_experiment
         except ImportError:
             raise ImportError(
-                "공식 Cellulus 학습을 위해 cellulus 패키지가 필요합니다:\n"
+                "The cellulus package is required for official Cellulus training:\n"
                 "pip install git+https://github.com/funkelab/cellulus.git"
             )
         
-        print("\n🔷 공식 Cellulus 학습 시작")
+        print("\n🔷 Starting official Cellulus training")
         
-        # 디바이스 결정
+        # Determine device
         device = self.config.device
         if device is None:
             if torch.cuda.is_available():
@@ -399,10 +399,10 @@ class CellulusTrainer:
             else:
                 device = "cpu"
         
-        # zarr 경로 (상대 경로로 변환)
+        # zarr path (convert to relative path)
         zarr_rel = os.path.relpath(str(zarr_path), str(self.config.output_dir))
         
-        # 설정 생성
+        # Create configuration
         config = {
             'normalization_factor': 1.0,
             'model_config': {
@@ -430,7 +430,7 @@ class CellulusTrainer:
             },
         }
         
-        print(f"\n📋 공식 Cellulus 설정:")
+        print(f"\n📋 Official Cellulus configuration:")
         print(f"   num_fmaps: {self.config.num_fmaps}")
         print(f"   fmap_inc_factor: {self.config.fmap_inc_factor}")
         print(f"   crop_size: {self.config.crop_size}")
@@ -439,43 +439,43 @@ class CellulusTrainer:
         print(f"   learning_rate: {self.config.learning_rate}")
         print(f"   device: {device}")
         
-        # 작업 디렉토리 변경 (모델 저장 경로 기준)
+        # Change working directory (relative to model save path)
         original_cwd = os.getcwd()
         os.chdir(str(self.config.output_dir))
         
         try:
-            print(f"\n🚀 학습 시작 (작업 디렉토리: {self.config.output_dir})\n")
+            print(f"\n🚀 Starting training (working directory: {self.config.output_dir})\n")
             
-            # ExperimentConfig 생성 및 학습 실행
+            # Create ExperimentConfig and run training
             experiment_config = ExperimentConfig(**config)
             train_experiment(experiment_config)
             
         finally:
             os.chdir(original_cwd)
         
-        # 체크포인트 경로
+        # Checkpoint path
         checkpoint_path = self.config.output_dir / "models" / "best_loss.pth"
         
         if checkpoint_path.exists():
-            print(f"\n✅ 학습 완료: {checkpoint_path}")
+            print(f"\n✅ Training complete: {checkpoint_path}")
         else:
-            # 다른 가능한 경로 확인
+            # Check other possible paths
             models_dir = self.config.output_dir / "models"
             if models_dir.exists():
                 pth_files = list(models_dir.glob("*.pth"))
                 if pth_files:
                     checkpoint_path = pth_files[0]
-                    print(f"\n✅ 학습 완료: {checkpoint_path}")
+                    print(f"\n✅ Training complete: {checkpoint_path}")
         
         return checkpoint_path
     
     def build_model(self):
-        """모델 구축"""
+        """Build model"""
         import torch
         import torch.nn as nn
         
         class SimpleUNet(nn.Module):
-            """간단한 U-Net 기반 임베딩 네트워크"""
+            """Simple U-Net based embedding network"""
             
             def __init__(self, in_channels=1, num_embeddings=8, num_fmaps=32):
                 super().__init__()
@@ -563,13 +563,13 @@ class CellulusTrainer:
         return loss.mean()
     
     def train(self, zarr_path: Path):
-        """모델 학습"""
+        """Train model"""
         import torch
         from torch.utils.data import Dataset, DataLoader
         import zarr
         from tqdm import tqdm
         
-        # 데이터셋 클래스
+        # Dataset class
         class AFMDataset(Dataset):
             def __init__(self, zarr_path, dataset_name='train/raw', patch_size=128):
                 root = zarr.open_group(str(zarr_path), mode='r')
@@ -596,61 +596,61 @@ class CellulusTrainer:
                 
                 return torch.from_numpy(patch).unsqueeze(0)
         
-        # 디바이스 설정
+        # Device setup
         self.device = get_device(self.config.use_gpu)
-        
+
         # ============================================================
-        # AMP (Automatic Mixed Precision) 설정
+        # AMP (Automatic Mixed Precision) setup
         # ============================================================
         self.use_amp = False
         self.scaler = None
         
         if self.config.use_amp:
             if self.device.type == 'cuda':
-                # CUDA AMP - FP16 사용
+                # CUDA AMP - use FP16
                 self.use_amp = True
                 self.scaler = torch.cuda.amp.GradScaler()
-                print("   ✓ CUDA AMP (FP16) 활성화")
+                print("   ✓ CUDA AMP (FP16) enabled")
             elif self.device.type == 'mps':
-                # MPS에서는 AMP 제한적 지원
-                # PyTorch 2.0+ 에서 일부 지원
+                # Limited AMP support on MPS
+                # Partially supported in PyTorch 2.0+
                 try:
-                    # MPS에서 autocast 테스트
+                    # Test autocast on MPS
                     with torch.autocast(device_type='mps', dtype=torch.float16):
                         pass
                     self.use_amp = True
-                    print("   ✓ MPS AMP 활성화")
+                    print("   ✓ MPS AMP enabled")
                 except Exception:
                     self.use_amp = False
-                    print("   ⚠️ MPS AMP 미지원 - FP32 사용")
+                    print("   ⚠️ MPS AMP not supported - using FP32")
         
-        # 모델 구축
+        # Build model
         self.build_model()
-        
+
         # ============================================================
-        # torch.compile (PyTorch 2.0+) - 추가 최적화
+        # torch.compile (PyTorch 2.0+) - additional optimization
         # ============================================================
         if self.config.compile_model and hasattr(torch, 'compile'):
             try:
                 self.model = torch.compile(self.model)
-                print("   ✓ torch.compile 적용")
+                print("   ✓ torch.compile applied")
             except Exception as e:
-                print(f"   ⚠️ torch.compile 실패: {e}")
+                print(f"   ⚠️ torch.compile failed: {e}")
         
-        # 데이터로더 - 멀티코어 CPU 활용
+        # DataLoader - leverage multi-core CPU
         dataset = AFMDataset(zarr_path, patch_size=self.config.patch_size)
         
-        # 디바이스에 따른 최적화 설정
+        # Optimization settings based on device
         num_workers = self.config.num_workers
         pin_memory = self.config.pin_memory
         prefetch_factor = self.config.prefetch_factor
         persistent_workers = num_workers > 0
         
-        # MPS에서는 pin_memory가 효과 없음 (통합 메모리)
+        # pin_memory has no effect on MPS (unified memory)
         if self.device.type == 'mps':
             pin_memory = False
         
-        print(f"\n⚡ DataLoader 설정:")
+        print(f"\n⚡ DataLoader settings:")
         print(f"   num_workers: {num_workers}")
         print(f"   prefetch_factor: {prefetch_factor}")
         print(f"   pin_memory: {pin_memory}")
@@ -663,19 +663,19 @@ class CellulusTrainer:
             'pin_memory': pin_memory,
         }
         
-        # num_workers > 0일 때만 추가 옵션 적용
+        # Apply additional options only when num_workers > 0
         if num_workers > 0:
             dataloader_kwargs['prefetch_factor'] = prefetch_factor
             dataloader_kwargs['persistent_workers'] = persistent_workers
         
         dataloader = DataLoader(dataset, **dataloader_kwargs)
         
-        print(f"\n🚀 학습 시작: {self.config.num_epochs} epochs, batch_size={self.config.batch_size}\n")
+        print(f"\n🚀 Starting training: {self.config.num_epochs} epochs, batch_size={self.config.batch_size}\n")
         
         best_loss = float('inf')
         checkpoint_path = self.config.output_dir / 'best_loss.pth'
         
-        # tqdm 진행 표시줄
+        # tqdm progress bar
         epoch_pbar = tqdm(
             range(self.config.num_epochs),
             desc="Training",
@@ -688,7 +688,7 @@ class CellulusTrainer:
             self.model.train()
             total_loss = 0
             
-            # 배치별 진행 표시 (에폭 내)
+            # Per-batch progress display (within epoch)
             batch_pbar = tqdm(
                 dataloader,
                 desc=f"  Epoch {epoch+1}",
@@ -700,9 +700,9 @@ class CellulusTrainer:
             for batch in batch_pbar:
                 batch = batch.to(self.device, non_blocking=True)
                 
-                self.optimizer.zero_grad(set_to_none=True)  # 메모리 효율성
+                self.optimizer.zero_grad(set_to_none=True)  # Memory efficiency
                 
-                # AMP 적용
+                # Apply AMP
                 if self.use_amp and self.device.type == 'cuda':
                     with torch.cuda.amp.autocast():
                         embeddings = self.model(batch)
@@ -726,13 +726,13 @@ class CellulusTrainer:
             
             avg_loss = total_loss / len(dataloader)
             
-            # 진행 표시줄 업데이트
+            # Update progress bar
             epoch_pbar.set_postfix({
                 'loss': f'{avg_loss:.4f}',
                 'best': f'{best_loss:.4f}'
             })
-            
-            # 체크포인트 저장
+
+            # Save checkpoint
             if avg_loss < best_loss:
                 best_loss = avg_loss
                 torch.save({
@@ -745,14 +745,14 @@ class CellulusTrainer:
                         'num_fmaps': self.config.num_fmaps,
                     }
                 }, checkpoint_path)
-                # 진행 표시줄 업데이트
+                # Update progress bar
                 epoch_pbar.set_postfix({
                     'loss': f'{avg_loss:.4f}',
                     'best': f'{best_loss:.4f}',
                     'saved': '✓'
                 })
-            
-            # 주기적 체크포인트
+
+            # Periodic checkpoint
             if (epoch + 1) % self.config.checkpoint_interval == 0:
                 periodic_path = self.config.output_dir / f'checkpoint_epoch_{epoch+1}.pth'
                 torch.save({
@@ -761,61 +761,61 @@ class CellulusTrainer:
                     'epoch': epoch,
                     'loss': avg_loss,
                 }, periodic_path)
-                tqdm.write(f"   💾 체크포인트 저장: {periodic_path.name}")
+                tqdm.write(f"   💾 Checkpoint saved: {periodic_path.name}")
         
         epoch_pbar.close()
-        print(f"\n✓ 학습 완료! Best loss: {best_loss:.4f}")
-        print(f"✓ 모델 저장됨: {checkpoint_path}")
+        print(f"\n✓ Training complete! Best loss: {best_loss:.4f}")
+        print(f"✓ Model saved: {checkpoint_path}")
         
         return checkpoint_path
 
 
 # ============================================================
-# 향후 확장용 Trainer 클래스들
+# Trainer classes for future expansion
 # ============================================================
 
 class StarDistTrainer:
-    """StarDist 모델 학습기 (향후 구현)"""
+    """StarDist model trainer (to be implemented)"""
     
     def __init__(self, config: TrainingConfig):
         self.config = config
     
     def train(self, images: List[np.ndarray], labels: List[np.ndarray]):
         """
-        StarDist 학습 (라벨 필요)
-        
-        TODO: StarDist 커스텀 학습 구현
+        StarDist training (labels required)
+
+        TODO: Implement custom StarDist training
         """
         raise NotImplementedError(
-            "StarDist 커스텀 학습은 아직 구현되지 않았습니다.\n"
-            "참고: https://github.com/stardist/stardist"
+            "Custom StarDist training is not yet implemented.\n"
+            "Reference: https://github.com/stardist/stardist"
         )
 
 
 class CellposeTrainer:
-    """Cellpose 모델 학습기 (향후 구현)"""
+    """Cellpose model trainer (to be implemented)"""
     
     def __init__(self, config: TrainingConfig):
         self.config = config
     
     def train(self, images: List[np.ndarray], labels: List[np.ndarray]):
         """
-        Cellpose 학습 (라벨 필요)
-        
-        TODO: Cellpose 커스텀 학습 구현
+        Cellpose training (labels required)
+
+        TODO: Implement custom Cellpose training
         """
         raise NotImplementedError(
-            "Cellpose 커스텀 학습은 아직 구현되지 않았습니다.\n"
-            "참고: https://github.com/MouseLand/cellpose"
+            "Custom Cellpose training is not yet implemented.\n"
+            "Reference: https://github.com/MouseLand/cellpose"
         )
 
 
 # ============================================================
-# 메인 함수
+# Main function
 # ============================================================
 
 def get_trainer(config: TrainingConfig):
-    """설정에 맞는 Trainer 반환"""
+    """Return the appropriate Trainer for the given configuration"""
     trainers = {
         'cellulus': CellulusTrainer,
         'stardist': StarDistTrainer,
@@ -823,102 +823,102 @@ def get_trainer(config: TrainingConfig):
     }
     
     if config.model_type not in trainers:
-        raise ValueError(f"지원하지 않는 모델: {config.model_type}\n"
-                        f"지원 모델: {list(trainers.keys())}")
+        raise ValueError(f"Unsupported model: {config.model_type}\n"
+                        f"Supported models: {list(trainers.keys())}")
     
     return trainers[config.model_type](config)
 
 
 def main():
-    """메인 함수"""
+    """Main function"""
     parser = argparse.ArgumentParser(
-        description='Grain Analyzer 모델 학습',
+        description='Grain Analyzer Model Training',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-예시:
-  # 기본 Cellulus 학습
+Examples:
+  # Basic Cellulus training
   python train_model.py
-  
-  # 에폭 수 지정
+
+  # Specify number of epochs
   python train_model.py --epochs 5000
-  
-  # 커스텀 경로
+
+  # Custom paths
   python train_model.py --data-dir ./my_data --output-dir ./my_models
-  
-  # 배치 크기 및 학습률 조정
+
+  # Adjust batch size and learning rate
   python train_model.py --batch-size 8 --lr 0.0005
 """
     )
     
-    # 모델 설정
+    # Model settings
     parser.add_argument('--model', type=str, default='cellulus',
                         choices=['cellulus', 'stardist', 'cellpose'],
-                        help='학습할 모델 타입 (기본: cellulus)')
+                        help='Model type to train (default: cellulus)')
     parser.add_argument('--official', action='store_true', default=True,
-                        help='공식 Cellulus 라이브러리 사용 (기본: True)')
+                        help='Use official Cellulus library (default: True)')
     parser.add_argument('--simple', action='store_true',
-                        help='간소화 모델 사용 (공식 Cellulus 대신)')
-    
-    # 학습 파라미터
+                        help='Use simplified model (instead of official Cellulus)')
+
+    # Training parameters
     parser.add_argument('--epochs', type=int, default=10000,
-                        help='학습 에폭/반복 수 (기본: 10000)')
+                        help='Number of training epochs/iterations (default: 10000)')
     parser.add_argument('--batch-size', type=int, default=16,
-                        help='배치 크기 (기본: 16, 공식 Cellulus 권장)')
+                        help='Batch size (default: 16, recommended for official Cellulus)')
     parser.add_argument('--lr', type=float, default=4e-5,
-                        help='학습률 (기본: 4e-5, 공식 Cellulus 권장)')
+                        help='Learning rate (default: 4e-5, recommended for official Cellulus)')
     parser.add_argument('--patch-size', type=int, default=128,
-                        help='학습 패치 크기 - 간소화 모델용 (기본: 128)')
+                        help='Training patch size - for simplified model (default: 128)')
     parser.add_argument('--crop-size', type=int, default=252,
-                        help='학습 crop 크기 - 공식 Cellulus용 (기본: 252)')
-    
-    # 모델 구조
+                        help='Training crop size - for official Cellulus (default: 252)')
+
+    # Model architecture
     parser.add_argument('--num-embeddings', type=int, default=8,
-                        help='임베딩 채널 수 - 간소화 모델용 (기본: 8)')
+                        help='Number of embedding channels - for simplified model (default: 8)')
     parser.add_argument('--num-fmaps', type=int, default=24,
-                        help='기본 특성 맵 수 (기본: 24, 공식 Cellulus 권장)')
+                        help='Base feature map count (default: 24, recommended for official Cellulus)')
     parser.add_argument('--fmap-inc-factor', type=int, default=3,
-                        help='레이어별 특성 맵 증가율 - 공식 Cellulus용 (기본: 3)')
-    
-    # 경로
+                        help='Feature map increase factor per layer - for official Cellulus (default: 3)')
+
+    # Paths
     parser.add_argument('--data-dir', type=str, default=None,
-                        help='학습 데이터 디렉토리 (기본: tests/input_data/qd)')
+                        help='Training data directory (default: tests/input_data/qd)')
     parser.add_argument('--output-dir', type=str, default=None,
-                        help='출력 디렉토리 (기본: tests/model_data/{model})')
-    
-    # GPU 설정
+                        help='Output directory (default: tests/model_data/{model})')
+
+    # GPU settings
     parser.add_argument('--no-gpu', action='store_true',
-                        help='GPU 사용 비활성화')
+                        help='Disable GPU usage')
     parser.add_argument('--device', type=str, default=None,
-                        help='특정 디바이스 지정 (cuda, mps, cpu)')
-    
-    # 체크포인트
+                        help='Specify device (cuda, mps, cpu)')
+
+    # Checkpoint
     parser.add_argument('--checkpoint-interval', type=int, default=1000,
-                        help='체크포인트 저장 간격 (기본: 1000)')
+                        help='Checkpoint save interval (default: 1000)')
     parser.add_argument('--log-interval', type=int, default=100,
-                        help='로그 출력 간격 (기본: 100)')
-    
-    # 하드웨어 최적화
+                        help='Log output interval (default: 100)')
+
+    # Hardware optimization
     parser.add_argument('--num-workers', type=int, default=-1,
-                        help='DataLoader 워커 수 (-1: 자동, 0: 비활성화)')
+                        help='Number of DataLoader workers (-1: auto, 0: disabled)')
     parser.add_argument('--prefetch-factor', type=int, default=2,
-                        help='미리 로드할 배치 수 (기본: 2)')
+                        help='Number of batches to prefetch (default: 2)')
     parser.add_argument('--no-pin-memory', action='store_true',
-                        help='pin_memory 비활성화')
-    
-    # CUDA/GPU 최적화
+                        help='Disable pin_memory')
+
+    # CUDA/GPU optimization
     parser.add_argument('--no-amp', action='store_true',
-                        help='Automatic Mixed Precision 비활성화')
+                        help='Disable Automatic Mixed Precision')
     parser.add_argument('--no-cudnn-benchmark', action='store_true',
-                        help='cuDNN benchmark 모드 비활성화')
+                        help='Disable cuDNN benchmark mode')
     parser.add_argument('--compile', action='store_true',
-                        help='torch.compile 사용 (PyTorch 2.0+)')
+                        help='Use torch.compile (PyTorch 2.0+)')
     
     args = parser.parse_args()
     
-    # --simple 옵션이 있으면 공식 Cellulus 비활성화
+    # Disable official Cellulus if --simple option is set
     use_official = not args.simple
     
-    # 설정 생성
+    # Create configuration
     config = TrainingConfig(
         model_type=args.model,
         use_official=use_official,
@@ -944,80 +944,80 @@ def main():
         compile_model=args.compile,
     )
     
-    # 환경 설정
+    # Environment setup
     setup_environment(config)
-    
-    # 헤더 출력
+
+    # Print header
     print("=" * 70)
-    print(f"🧠 Grain Analyzer 모델 학습: {config.model_type.upper()}")
+    print(f"🧠 Grain Analyzer Model Training: {config.model_type.upper()}")
     print("=" * 70)
     
-    # 하드웨어 정보 출력
+    # Print hardware info
     hw_info = print_hardware_info()
     
-    print(f"\n📋 학습 설정:")
-    print(f"   모델: {config.model_type}")
-    print(f"   공식 Cellulus: {'✓' if config.use_official else '✗ (간소화 모델)'}")
-    print(f"   반복 수: {config.num_epochs}")
-    print(f"   배치 크기: {config.batch_size}")
-    print(f"   학습률: {config.learning_rate}")
+    print(f"\n📋 Training configuration:")
+    print(f"   Model: {config.model_type}")
+    print(f"   Official Cellulus: {'✓' if config.use_official else '✗ (simplified model)'}")
+    print(f"   Iterations: {config.num_epochs}")
+    print(f"   Batch size: {config.batch_size}")
+    print(f"   Learning rate: {config.learning_rate}")
     if config.use_official:
         print(f"   crop_size: {config.crop_size}")
         print(f"   num_fmaps: {config.num_fmaps}")
         print(f"   fmap_inc_factor: {config.fmap_inc_factor}")
-    print(f"   DataLoader 워커: {config.num_workers}")
-    print(f"   데이터: {config.data_dir}")
-    print(f"   출력: {config.output_dir}")
+    print(f"   DataLoader workers: {config.num_workers}")
+    print(f"   Data: {config.data_dir}")
+    print(f"   Output: {config.output_dir}")
     
-    # M3 Ultra 최적화 권장사항
+    # M3 Ultra optimization recommendations
     if hw_info.get('cpu_count', 0) >= 20 and hw_info.get('memory_gb', 0) >= 64:
-        print(f"\n💡 고성능 하드웨어 감지! 권장 설정:")
-        print(f"   --batch-size 16 또는 32 (현재: {config.batch_size})")
-        print(f"   --num-workers 8~12 (현재: {config.num_workers})")
+        print(f"\n💡 High-performance hardware detected! Recommended settings:")
+        print(f"   --batch-size 16 or 32 (current: {config.batch_size})")
+        print(f"   --num-workers 8~12 (current: {config.num_workers})")
     
-    # 출력 디렉토리 생성
+    # Create output directory
     config.output_dir.mkdir(parents=True, exist_ok=True)
     
-    # 데이터 로드
+    # Load data
     print("\n" + "=" * 70)
-    print("1️⃣  데이터 로드")
+    print("1️⃣  Load Data")
     print("=" * 70)
     
     images = load_afm_data(config.data_dir)
     
     if not images:
-        print("❌ 로드된 이미지가 없습니다.")
+        print("❌ No images loaded.")
         return 1
     
-    # Trainer 생성 및 학습
+    # Create trainer and train
     print("\n" + "=" * 70)
-    print(f"2️⃣  {config.model_type.upper()} 모델 학습")
+    print(f"2️⃣  {config.model_type.upper()} Model Training")
     print("=" * 70)
     
     trainer = get_trainer(config)
     
     if config.model_type == 'cellulus':
         if config.use_official:
-            # 공식 Cellulus 학습
+            # Official Cellulus training
             zarr_path = trainer.prepare_data(images, for_official=True)
             checkpoint_path = trainer.train_official(zarr_path)
         else:
-            # 간소화 모델 학습
+            # Simplified model training
             zarr_path = trainer.prepare_data(images, for_official=False)
             checkpoint_path = trainer.train(zarr_path)
     else:
-        # StarDist, Cellpose는 라벨이 필요
+        # StarDist, Cellpose require labels
         trainer.train(images, labels=None)
         checkpoint_path = None
     
-    # 완료
+    # Complete
     print("\n" + "=" * 70)
-    print("✅ 학습 완료!")
+    print("✅ Training complete!")
     print("=" * 70)
     
     if checkpoint_path and checkpoint_path.exists():
-        print(f"\n✓ 학습된 모델: {checkpoint_path}")
-        print("\n사용 방법:")
+        print(f"\n✓ Trained model: {checkpoint_path}")
+        print("\nUsage:")
         print("   from grain_analyzer import segment_cellulus")
         print(f"   labels = segment_cellulus(height, checkpoint_path='{checkpoint_path}')")
     

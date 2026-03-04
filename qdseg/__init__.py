@@ -1,47 +1,47 @@
 """
 QDSeg (Quantum Dot Segmentation) Package
 
-AFM 이미지에서 Quantum Dot(양자점) 검출 및 분석을 위한 순수 분석 라이브러리
+A pure analysis library for quantum dot detection and analysis in AFM images.
 
-핵심 특성:
-- 순수 분석 라이브러리 (Stateless) - 데이터베이스나 파일 시스템 상태 관리 없음
-- 단일 파일/이미지 처리에 집중
-- 재사용 가능한 범용 패키지
+Key Features:
+- Pure analysis library (Stateless) - no database or file system state management
+- Focused on single file/image processing
+- Reusable general-purpose package
 
-모듈 구조:
-- AFMData: XQD 파일 로드 및 데이터 접근
-- corrections: 데이터 보정 (flat, baseline 등)
-- segmentation: 세그멘테이션 알고리즘
-  - segment_rule_based: Otsu + Distance + DBSCAN + Voronoi (권장)
-  - segment_watershed: Watershed 기반
-  - segment_thresholding: Thresholding 기반
+Module Structure:
+- AFMData: XQD file loading and data access
+- corrections: Data corrections (flat, baseline, etc.)
+- segmentation: Segmentation algorithms
+  - segment_rule_based: Otsu + Distance + DBSCAN + Voronoi (recommended)
+  - segment_watershed: Watershed-based
+  - segment_thresholding: Thresholding-based
   - segment_stardist: StarDist (TensorFlow)
   - segment_cellpose: CellPose (PyTorch)
-  - segment_cellulus: Cellulus (PyTorch, 학습 필요)
-- statistics: Grain 통계 계산
-- analyze: 고수준 분석 API
-- utils: GPU 유틸리티
+  - segment_cellulus: Cellulus (PyTorch, requires training)
+- statistics: Grain statistics calculation
+- analyze: High-level analysis API
+- utils: GPU utilities
 
-GPU 가속 (환경에 따라 자동 감지):
+GPU Acceleration (auto-detected based on environment):
 - NVIDIA GPU: CUDA
 - Apple Silicon: MPS (PyTorch) / Metal (TensorFlow)
-- 그 외: CPU
+- Other: CPU
 
-사용 예시:
+Usage Example:
     >>> from qdseg import AFMData, segment_rule_based, calculate_grain_statistics
     >>>
-    >>> # 1. 데이터 로드
+    >>> # 1. Load data
     >>> data = AFMData("path/to/file.xqd")
     >>>
-    >>> # 2. 보정 적용
+    >>> # 2. Apply corrections
     >>> data.first_correction().second_correction().third_correction()
-    >>> data.align_rows(method='median')  # Scan Line Artefacts 보정 (flat 전)
+    >>> data.align_rows(method='median')  # Scan line artefact correction (before flat)
     >>> data.flat_correction("line_by_line").baseline_correction("min_to_zero")
     >>>
-    >>> # 3. 세그멘테이션
+    >>> # 3. Segmentation
     >>> labels = segment_rule_based(data.get_data(), data.get_meta())
     >>>
-    >>> # 4. 통계 계산
+    >>> # 4. Calculate statistics
     >>> stats = calculate_grain_statistics(labels, data.get_data(), data.get_meta())
     >>> print(f"Found {stats['num_grains']} quantum dots")
 """
