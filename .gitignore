@@ -31,7 +31,8 @@ Thumbs.db
 *.log
 var/
 
-# Large test/model data
+# Experimental / measurement data (never commit)
+tests/input_data/
 tests/model_data/
 tests/output_data/
 
