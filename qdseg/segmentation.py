@@ -20,6 +20,71 @@ from skimage.filters import gaussian, threshold_otsu
 from skimage.morphology import remove_small_objects, remove_small_holes
 from skimage.feature import peak_local_max
 
+# Module-level model cache for DL methods (avoids reloading on every call)
+_model_cache: Dict[str, object] = {}
+
+
+# ── TensorFlow GPU helpers ────────────────────────────────────────────────
+
+
+def _ensure_tf_device(use_gpu: bool = True) -> None:
+    """Configure TensorFlow to use GPU or CPU.
+
+    When *use_gpu* is True, runs the normal GPU setup.  When False, sets
+    an internal flag so that ``_tf_cpu_context()`` can be used to force
+    operations onto CPU via ``tf.device('/CPU:0')``.
+
+    This avoids ``CUDA_ERROR_INVALID_PTX`` on architectures not yet
+    supported by the installed TF build (e.g. Blackwell sm_120 with
+    TF <= 2.22).
+    """
+    global _force_tf_cpu
+    if use_gpu:
+        _force_tf_cpu = False
+        try:
+            from .utils import setup_gpu_environment, check_tensorflow_gpu
+            setup_gpu_environment()
+            check_tensorflow_gpu(verbose=False)
+        except ImportError:
+            pass
+    else:
+        _force_tf_cpu = True
+
+
+_force_tf_cpu: bool = False
+
+
+class _tf_cpu_context:
+    """Context manager that forces TF ops onto CPU when ``_force_tf_cpu`` is set."""
+
+    def __enter__(self):
+        if _force_tf_cpu:
+            import tensorflow as tf
+            self._ctx = tf.device('/CPU:0')
+            self._ctx.__enter__()
+        else:
+            self._ctx = None
+        return self
+
+    def __exit__(self, *exc):
+        if self._ctx is not None:
+            return self._ctx.__exit__(*exc)
+        return False
+
+
+def _is_gpu_error(exc: BaseException) -> bool:
+    """Return True if *exc* looks like a CUDA / GPU compatibility error."""
+    msg = str(exc).lower()
+    markers = [
+        'cuda_error',
+        'invalid_ptx',
+        'invalid_handle',
+        'culaunchkernel',
+        'cumoduleloaddata',
+        'gpu',
+    ]
+    return any(m in msg for m in markers)
+
 
 def segment_rule_based(
     height: np.ndarray,
@@ -200,16 +265,25 @@ def segment_thresholding(
     threshold_method: str = 'otsu',
     threshold_value: Optional[float] = None,
     min_area_px: int = 20,
-    closing_size: int = 3
+    closing_size: int = 3,
+    use_distance_separation: bool = False,
+    min_distance: int = 5
 ) -> np.ndarray:
     """
     Thresholding 기반 grain segmentation
 
-    Steps:
+    Steps (use_distance_separation=False):
     1. Threshold 결정 (Otsu, Isodata, Manual 등)
     2. 이진화 (Binary thresholding)
     3. Morphological closing (구멍 메우기)
     4. Connected component labeling
+    5. 작은 영역 필터링
+
+    Steps (use_distance_separation=True):
+    1. Threshold 결정 및 이진화
+    2. Distance Transform 계산
+    3. Local peak 검출
+    4. Watershed로 붙어있는 grain 분리
     5. 작은 영역 필터링
 
     Parameters
@@ -219,13 +293,24 @@ def segment_thresholding(
     meta : dict, optional
         Metadata (optional)
     threshold_method : str
-        'otsu', 'isodata', 'manual' (default: 'otsu')
+        Threshold method (default: 'otsu')
+        - 'otsu': Otsu's method (histogram-based, class variance maximization)
+        - 'isodata': Iterative Isodata method (midpoint of two class means)
+        - 'li': Li's minimum cross-entropy method
+        - 'triangle': Triangle algorithm (good for unimodal distributions)
+        - 'yen': Yen's method (entropy-based)
+        - 'minimum': Minimum method (histogram valley)
+        - 'manual': User-specified threshold value
     threshold_value : float, optional
         Manual threshold value (nm) (used if method='manual')
     min_area_px : int
         최소 grain 면적 (픽셀) (default: 20)
     closing_size : int
         Morphological closing kernel size (default: 3)
+    use_distance_separation : bool
+        Distance Transform + Local Peak으로 붙어있는 grain 분리 여부 (default: False)
+    min_distance : int
+        Local peak 간 최소 거리 (픽셀, use_distance_separation=True일 때만 사용) (default: 5)
 
     Returns
     -------
@@ -237,20 +322,32 @@ def segment_thresholding(
     >>> labels = segment_thresholding(height)
     >>> labels = segment_thresholding(height, threshold_method='isodata')
     >>> labels = segment_thresholding(height, threshold_method='manual', threshold_value=5.0)
+    >>> labels = segment_thresholding(height, use_distance_separation=True, min_distance=10)
     """
-    from skimage import filters, morphology
+    from skimage import filters, morphology, segmentation
 
     # 1. Threshold 결정
     if threshold_method == 'otsu':
         threshold = filters.threshold_otsu(height)
     elif threshold_method == 'isodata':
         threshold = filters.threshold_isodata(height)
+    elif threshold_method == 'li':
+        threshold = filters.threshold_li(height)
+    elif threshold_method == 'triangle':
+        threshold = filters.threshold_triangle(height)
+    elif threshold_method == 'yen':
+        threshold = filters.threshold_yen(height)
+    elif threshold_method == 'minimum':
+        threshold = filters.threshold_minimum(height)
     elif threshold_method == 'manual':
         if threshold_value is None:
             raise ValueError("threshold_value must be provided when method='manual'")
         threshold = threshold_value
     else:
-        raise ValueError(f"Unknown threshold_method: {threshold_method}")
+        raise ValueError(
+            f"Unknown threshold_method: {threshold_method}. "
+            f"Supported methods: 'otsu', 'isodata', 'li', 'triangle', 'yen', 'minimum', 'manual'"
+        )
 
     # 2. 이진화
     binary = height > threshold
@@ -260,8 +357,31 @@ def segment_thresholding(
         selem = morphology.disk(closing_size)
         binary = morphology.closing(binary, selem)
 
-    # 4. Connected component labeling
-    labeled_image = morphology.label(binary)
+    # 4. Distance Transform + Local Peak로 분리 (옵션)
+    if use_distance_separation:
+        # Distance Transform 계산
+        distance = ndi.distance_transform_edt(binary)
+
+        # Local maxima 검출
+        local_max_coords = peak_local_max(
+            distance,
+            min_distance=min_distance,
+            labels=binary,
+        )
+
+        # 좌표를 boolean mask로 변환
+        local_max = np.zeros(binary.shape, dtype=bool)
+        if len(local_max_coords) > 0:
+            local_max[tuple(local_max_coords.T)] = True
+
+        # Marker 생성
+        markers = ndi.label(local_max)[0]
+
+        # Watershed로 분리
+        labeled_image = segmentation.watershed(-distance, markers, mask=binary)
+    else:
+        # 4. Connected component labeling (기본)
+        labeled_image = morphology.label(binary)
 
     # 5. 작은 영역 제거
     with warnings.catch_warnings():
@@ -355,46 +475,57 @@ def segment_stardist(
         from stardist.models import StarDist2D
     except ImportError:
         raise ImportError(
-            "StarDist가 설치되지 않았습니다. "
-            "설치: pip install stardist tensorflow"
+            "StarDist is not installed. "
+            "Install with: pip install stardist tensorflow"
         )
-    
-    # GPU 환경 설정
-    if use_gpu:
-        try:
-            from .utils import setup_gpu_environment, check_tensorflow_gpu
-            setup_gpu_environment()
-            check_tensorflow_gpu(verbose=False)
-        except ImportError:
-            pass
-    
-    # Load model
-    if model_path:
-        # 커스텀 모델 로드
-        # model_path가 디렉토리 경로이면, 그 안의 모델을 로드
-        # 예: model_path="/path/to/models/my_model" -> basedir="/path/to/models", name="my_model"
-        import os
-        model_dir = os.path.dirname(model_path)
-        model_name_custom = os.path.basename(model_path)
-        if model_dir == '':
-            model_dir = '.'
-        model = StarDist2D(None, name=model_name_custom, basedir=model_dir)
-    else:
-        model = StarDist2D.from_pretrained(model_name)
-    
+
+    # GPU setup — detect incompatible GPU and fallback to CPU automatically
+    _ensure_tf_device(use_gpu)
+
+    def _load_model():
+        """Load or retrieve cached StarDist model."""
+        cache_key = f"stardist:{model_path or model_name}"
+        if cache_key in _model_cache:
+            return _model_cache[cache_key], cache_key
+        if model_path:
+            import os
+            model_dir = os.path.dirname(model_path) or '.'
+            m = StarDist2D(None, name=os.path.basename(model_path), basedir=model_dir)
+        else:
+            m = StarDist2D.from_pretrained(model_name)
+        _model_cache[cache_key] = m
+        return m, cache_key
+
+    def _run(img):
+        """Load model + predict, all within the current TF device context."""
+        m, _ = _load_model()
+        lbl, _ = m.predict_instances(img, prob_thresh=prob_thresh, nms_thresh=nms_thresh)
+        return lbl
+
     # Normalize input
-    if normalize_input:
-        img_norm = _normalize_percentile(height, 1, 99.8)
-    else:
-        img_norm = height
-    
-    # Predict
-    labels, _ = model.predict_instances(
-        img_norm,
-        prob_thresh=prob_thresh,
-        nms_thresh=nms_thresh,
-    )
-    
+    img_norm = _normalize_percentile(height, 1, 99.8) if normalize_input else height
+
+    # Try GPU first, fallback to CPU on CUDA errors
+    try:
+        with _tf_cpu_context():
+            labels = _run(img_norm)
+    except Exception as exc:
+        if use_gpu and _is_gpu_error(exc):
+            warnings.warn(
+                f"StarDist failed on GPU ({type(exc).__name__}). "
+                "Falling back to CPU.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            # Clear cached model (was built for GPU), force CPU
+            cache_key = f"stardist:{model_path or model_name}"
+            _model_cache.pop(cache_key, None)
+            _ensure_tf_device(use_gpu=False)
+            with _tf_cpu_context():
+                labels = _run(img_norm)
+        else:
+            raise
+
     return labels.astype(np.int32)
 
 
@@ -402,7 +533,6 @@ def segment_cellpose(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
-    model_type: str = "cyto3",
     diameter: Optional[float] = None,
     flow_threshold: float = 0.4,
     cellprob_threshold: float = 0.0,
@@ -412,87 +542,76 @@ def segment_cellpose(
     device: Optional["torch.device"] = None,
 ) -> np.ndarray:
     """
-    Cellpose-based segmentation using deep learning
-    
-    Uses gradient flow-based cell segmentation.
-    Requires cellpose to be installed.
-    
-    GPU 가속은 환경에 따라 자동 감지됩니다:
+    Cellpose-based segmentation using deep learning (Cellpose v4 / cpsam).
+
+    Uses the Cellpose-SAM (cpsam) model introduced in Cellpose v4.
+    Requires cellpose >= 4.0 to be installed.
+
+    GPU acceleration is auto-detected:
     - NVIDIA GPU: CUDA
     - Apple Silicon: MPS (Metal Performance Shaders)
-    - 그 외: CPU
-    
+    - Otherwise: CPU
+
     Parameters
     ----------
     height : np.ndarray
         Height image (2D, nm units)
     meta : dict, optional
         Metadata with 'pixel_nm' key (used for diameter estimation)
-    model_type : str
-        Model type (default: 'cyto3')
-        Options: 'cyto', 'cyto2', 'cyto3', 'nuclei', 'tissuenet_cp3', etc.
     diameter : float, optional
-        Expected cell diameter in pixels. If None, auto-estimated.
+        Expected grain diameter in pixels. If None, auto-estimated.
     flow_threshold : float
-        Flow error threshold (default: 0.4)
+        Flow error threshold (default: 0.4). Lower = fewer masks.
     cellprob_threshold : float
-        Cell probability threshold (default: 0.0)
+        Cell probability threshold (default: 0.0). Higher = stricter.
     model_path : str, optional
-        Path to custom trained model file (.pth or model directory)
-        If provided, model_type is ignored.
+        Path to a custom trained Cellpose model file.
+        If provided, the built-in cpsam model is not used.
     normalize_input : bool
         Whether to normalize input image (default: True)
     gpu : bool
         Whether to use GPU if available (default: True)
-        GPU type is auto-detected (CUDA/MPS/CPU)
     device : torch.device, optional
         Specific device to use. If None, auto-detected.
-    
+
     Returns
     -------
     labels : np.ndarray
         Label image (int32, 0=background, 1,2,3...=grains)
-    
+
     Raises
     ------
     ImportError
         If cellpose is not installed
-    
+
     Examples
     --------
     >>> labels = segment_cellpose(height, diameter=30)
-    >>> labels = segment_cellpose(height, model_type='nuclei')
     >>> # With custom trained model
     >>> labels = segment_cellpose(height, model_path="./models/afm_model")
     >>> # CPU only
     >>> labels = segment_cellpose(height, gpu=False)
-    >>> # Specific device
-    >>> import torch
-    >>> labels = segment_cellpose(height, device=torch.device('mps'))
-    
+
     Notes
     -----
-    - Cellpose is a generalist algorithm for cellular segmentation
-    - 'cyto3' model is recommended for general use (but slower, uses Transformer)
-    - 'cyto2' is faster with similar accuracy
-    - AFM images may require diameter tuning for best results
-    - Custom models can be trained with grain_analyzer.training.CellposeTrainer
-    - Install with: pip install cellpose
-    
+    - Cellpose v4 uses only the 'cpsam' (Cellpose-SAM) built-in model.
+      The model_type argument from v3 (cyto3, cyto2, nuclei, ...) is no
+      longer supported; pass a custom model path via model_path if needed.
+    - Install with: pip install "cellpose>=4.0"
+
     References
     ----------
     Cellpose: https://github.com/mouseland/cellpose
     """
-    # Lazy import - Cellpose 미설치 시 다른 함수는 사용 가능
+    # Lazy import - other functions remain available if Cellpose is not installed
     try:
         from cellpose import models
     except ImportError:
         raise ImportError(
-            "Cellpose가 설치되지 않았습니다. "
-            "설치: pip install cellpose"
+            "Cellpose is not installed. Install with: pip install 'cellpose>=4.0'"
         )
-    
-    # 디바이스 자동 감지
+
+    # Auto-detect device
     if device is None and gpu:
         try:
             from .utils import setup_gpu_environment, get_torch_device
@@ -500,22 +619,20 @@ def segment_cellpose(
             device = get_torch_device(verbose=False)
             gpu = device.type != 'cpu'
         except ImportError:
-            # utils 없으면 기본값 사용
             pass
-    
-    # Load model (Cellpose 4.x uses CellposeModel)
-    if model_path:
-        # 커스텀 모델 로드
-        model_kwargs = {'pretrained_model': model_path, 'gpu': gpu}
-        if device is not None:
-            model_kwargs['device'] = device
-        model = models.CellposeModel(**model_kwargs)
+
+    # Build model kwargs (Cellpose v4: only pretrained_model and device matter)
+    cache_key = f"cellpose:{model_path or 'cpsam'}:{gpu}"
+    if cache_key in _model_cache:
+        model = _model_cache[cache_key]
     else:
-        # 사전 학습 모델 사용
-        model_kwargs = {'model_type': model_type, 'gpu': gpu}
+        model_kwargs: dict = {'gpu': gpu}
         if device is not None:
             model_kwargs['device'] = device
+        if model_path:
+            model_kwargs['pretrained_model'] = model_path
         model = models.CellposeModel(**model_kwargs)
+        _model_cache[cache_key] = model
     
     # Normalize input
     if normalize_input:
@@ -593,8 +710,8 @@ def _voronoi_from_markers(
     
     # Assign labels based on nearest marker
     seed_labels = np.zeros_like(labels)
-    for i, (r, c) in enumerate(valid_markers, start=1):
-        seed_labels[r, c] = i
+    vm = np.asarray(valid_markers)
+    seed_labels[vm[:, 0], vm[:, 1]] = np.arange(1, len(valid_markers) + 1)
     
     labels = seed_labels[iy, ix]
     
@@ -1042,33 +1159,39 @@ def _segment_with_simple_cellulus(
             return self.out(d1)
     
     try:
-        # 체크포인트 로드
+        # Load checkpoint
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
-        
-        # 모델 상태 확인
+
+        # Check for simple model format
         if 'model_state_dict' not in checkpoint:
-            return None  # 간소화 모델이 아님
-        
-        # 모델 생성 및 가중치 로드
+            return None  # Not a simple Cellulus model
+
+        # Build model and load weights
         model = SimpleUNet().to(device)
         model.load_state_dict(checkpoint['model_state_dict'])
         model.eval()
-        
-        # 입력 텐서 생성
+
+        # Build input tensor
         img_tensor = torch.from_numpy(img_norm).float().unsqueeze(0).unsqueeze(0)
         img_tensor = img_tensor.to(device)
-        
-        # 임베딩 추출
+
+        # Extract embeddings
         with torch.no_grad():
             embeddings = model(img_tensor)  # (1, C, H, W)
-        
-        # 임베딩 -> 세그멘테이션 (클러스터링 기반)
+
+        # Embeddings -> instance labels
         embeddings = embeddings.squeeze(0).cpu().numpy()  # (C, H, W)
         labels = _embeddings_to_labels(embeddings, img_norm)
-        
+
         return labels
-        
-    except Exception:
+
+    except Exception as e:
+        import warnings
+        warnings.warn(
+            f"Simple Cellulus segmentation failed: {e}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return None
 
 

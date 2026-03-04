@@ -1,83 +1,55 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
+*.pyo
+*.pyd
 .Python
+*.so
+
+# Build / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+MANIFEST
 
 # Virtual environments
 .venv/
 venv/
-ENV/
 env/
 
-# Distribution / packaging
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Testing
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-coverage.xml
-*.cover
-
-# IDEs
-.vscode/
+# IDE
 .idea/
+.vscode/
 *.swp
-*.swo
-*~
-.DS_Store
-
-# Project specific
-tests/
-instructions.md
-.env
-.env_*
-*.env
-!.env.example
-
-# Model and data files (large files)
-*.pth
-*.pt
-*.h5
-*.hdf5
-*.zarr/
-*.model
-*.ckpt
-
-# Output files
-output/
-results/
-logs/
-*.log
-summary_md/
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
 
 # OS
-Thumbs.db
 .DS_Store
+Thumbs.db
+
+# Logs and temp outputs
+*.log
+var/
+
+# Test output images (development artifacts)
+adaptive_threshold_comparison.png
+aggressive_separation_test.png
+distance_separation_comparison.png
+min_distance_parameter_test.png
+threshold_adjustment_test.png
+threshold_comparison_multiple_files.png
+
+# Internal development notes
+AGENTS.md
+QDSEG_NEW_METHODS_GUIDE.md
+QDSEG_UPDATE_REQUIRED.md
+summary_md/
+instructions.md
+
+# Loose development test scripts (not part of the public test suite)
+test_adaptive_threshold.py
+test_distance_separation.py
+test_interactive_visualization.py
+test_threshold_adjustment.py
+test_threshold_multiple_files.py
+check_env.py

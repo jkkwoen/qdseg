@@ -1,18 +1,20 @@
 """
 Grain Statistics Calculation
 
-세그멘테이션 방법과 무관하게 label 이미지로부터 통계 계산
+Method-agnostic statistics from a label image.
 
-사용 예시:
-    >>> from grain_analyzer.statistics import calculate_grain_statistics
-    >>> stats = calculate_grain_statistics(labels, height, meta)
-    >>> print(f"Number of grains: {stats['num_grains']}")
+Examples
+--------
+>>> from qdseg.statistics import calculate_grain_statistics
+>>> stats = calculate_grain_statistics(labels, height, meta)
+>>> print(f"Number of grains: {stats['num_grains']}")
 """
 
 import math
 import numpy as np
 from typing import Dict, Optional, List, Any
 from skimage import measure
+from scipy.ndimage import sum as ndi_sum, maximum_position
 
 
 def calculate_grain_statistics(
@@ -21,10 +23,11 @@ def calculate_grain_statistics(
     meta: Optional[Dict] = None,
     *,
     min_pixel_area: int = 4,
+    _precomputed_grains: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
-    Calculate statistics from grain labels
-    
+    Calculate statistics from grain labels.
+
     Parameters
     ----------
     labels : np.ndarray
@@ -35,7 +38,11 @@ def calculate_grain_statistics(
         Metadata with 'pixel_nm' key for pixel size
     min_pixel_area : int
         Minimum grain area in pixels to include (default: 4)
-    
+    _precomputed_grains : list of dict, optional
+        If provided, skip the internal ``get_individual_grains`` call and
+        use these grain dicts directly.  This avoids redundant computation
+        when the caller already has the per-grain data.
+
     Returns
     -------
     stats : dict
@@ -50,11 +57,11 @@ def calculate_grain_statistics(
         - mean_eccentricity, mean_solidity, mean_aspect_ratio: float
         - grain_density, area_fraction: float
         - mean_height_nm, std_height_nm, min_height_nm, max_height_nm: float (if height provided)
-        - mean_peak_height_nm, std_peak_height_nm: float (if height provided)
-        - mean_centroid_height_nm, std_centroid_height_nm: float (if height provided)
+        - mean_height_peak_nm, std_height_peak_nm: float (if height provided)
+        - mean_height_centroid_nm, std_height_centroid_nm: float (if height provided)
         - mean_volume_nm3, std_volume_nm3: float (if height provided)
         - areas_nm2, diameters_nm: np.ndarray (per-grain arrays)
-    
+
     Examples
     --------
     >>> stats = calculate_grain_statistics(labels, height, meta)
@@ -63,10 +70,13 @@ def calculate_grain_statistics(
     """
     if labels.max() == 0:
         return _empty_statistics()
-    
+
     # If height is provided, use detailed grain analysis for more statistics
     if height is not None:
-        individual_grains = get_individual_grains(labels, height, meta, min_pixel_area=min_pixel_area)
+        if _precomputed_grains is not None:
+            individual_grains = _precomputed_grains
+        else:
+            individual_grains = get_individual_grains(labels, height, meta, min_pixel_area=min_pixel_area)
         
         if len(individual_grains) == 0:
             return _empty_statistics()
@@ -83,11 +93,12 @@ def calculate_grain_statistics(
         aspect_ratios = np.array([g['aspect_ratio'] for g in individual_grains])
         major_axis_nm = np.array([g['major_axis_nm'] for g in individual_grains])
         minor_axis_nm = np.array([g['minor_axis_nm'] for g in individual_grains])
+        orientations_deg = np.array([g['orientation_deg'] for g in individual_grains])
         
         # Height-based statistics
         height_means = np.array([g['height_mean_nm'] for g in individual_grains])
-        peak_heights = np.array([g['peak_height_nm'] for g in individual_grains])
-        centroid_heights = np.array([g['centroid_height_nm'] for g in individual_grains])
+        peak_heights = np.array([g['height_peak_nm'] for g in individual_grains])
+        centroid_heights = np.array([g['height_centroid_nm'] for g in individual_grains])
         volumes = np.array([g['volume_nm3'] for g in individual_grains])
         
         # Calculate coverage statistics
@@ -134,12 +145,12 @@ def calculate_grain_statistics(
             'max_height_nm': float(np.max(height_means)),
             
             # Peak height statistics
-            'mean_peak_height_nm': float(np.mean(peak_heights)),
-            'std_peak_height_nm': float(np.std(peak_heights)),
-            
+            'mean_height_peak_nm': float(np.mean(peak_heights)),
+            'std_height_peak_nm': float(np.std(peak_heights)),
+
             # Centroid height statistics
-            'mean_centroid_height_nm': float(np.mean(centroid_heights)),
-            'std_centroid_height_nm': float(np.std(centroid_heights)),
+            'mean_height_centroid_nm': float(np.mean(centroid_heights)),
+            'std_height_centroid_nm': float(np.std(centroid_heights)),
             
             # Volume statistics
             'mean_volume_nm3': float(np.mean(volumes)),
@@ -161,7 +172,7 @@ def calculate_grain_statistics(
             'aspect_ratios': aspect_ratios,
             'major_axis_nm': major_axis_nm,
             'minor_axis_nm': minor_axis_nm,
-            'orientations_rad': np.array([0.0] * len(individual_grains)),  # Not stored in individual grains
+            'orientations_rad': np.deg2rad(orientations_deg),
         }
     
     # Fallback: basic statistics without height data
@@ -296,8 +307,8 @@ def get_individual_grains(
         - grain_id: int
         - area_nm2, area_px, diameter_nm, diameter_px, volume_nm3: float
         - centroid_x_nm, centroid_y_nm, centroid_x_px, centroid_y_px: float
-        - centroid_height_nm: float (height at centroid position)
-        - peak_x_nm, peak_y_nm, peak_x_px, peak_y_px, peak_height_nm: float
+        - height_centroid_nm: float (height at centroid position)
+        - peak_x_nm, peak_y_nm, peak_x_px, peak_y_px, height_peak_nm: float
         - peak_to_centroid_dist_nm: float (distance between peak and centroid)
         - equivalent_radius_nm: float (radius from area: sqrt(area/π))
         - height_mean_nm, height_std_nm, height_max_nm: float
@@ -313,143 +324,136 @@ def get_individual_grains(
     """
     if labels.max() == 0:
         return []
-    
+
     # Get pixel size
     xp_nm, yp_nm = 1.0, 1.0
     if meta and 'pixel_nm' in meta:
         xp_nm, yp_nm = float(meta['pixel_nm'][0]), float(meta['pixel_nm'][1])
     px_area_nm2 = xp_nm * yp_nm
     px_length_nm = math.sqrt(px_area_nm2)
-    
-    # Get region properties
+
+    H, W = height.shape
+
+    # ── regionprops_table: single pass with intensity stats ──
     props = measure.regionprops_table(
         labels,
         intensity_image=height,
         properties=[
             'label', 'area', 'centroid', 'perimeter',
             'major_axis_length', 'minor_axis_length', 'orientation',
-            'eccentricity', 'solidity', 'convex_area'
+            'eccentricity', 'solidity', 'convex_area',
+            'intensity_mean', 'intensity_max', 'intensity_min',
         ]
     )
-    
+
+    # ── Filter by min_pixel_area up front ──
+    valid = props['area'] >= min_pixel_area
+    if not np.any(valid):
+        return []
+
+    label_ids   = props['label'][valid]
+    area_px     = props['area'][valid].astype(float)
+    cent_y      = props['centroid-0'][valid]
+    cent_x      = props['centroid-1'][valid]
+    perimeter_px_arr = props['perimeter'][valid]
+    major_px    = props['major_axis_length'][valid]
+    minor_px    = props['minor_axis_length'][valid]
+    orientation = props['orientation'][valid]
+    ecc         = props['eccentricity'][valid]
+    sol         = props['solidity'][valid]
+    convex_area = props['convex_area'][valid].astype(float)
+    i_mean      = props['intensity_mean'][valid]
+    i_max       = props['intensity_max'][valid]
+    i_min       = props['intensity_min'][valid]
+
+    n = len(label_ids)
+
+    # ── Derived geometry (vectorised) ──
+    area_nm2            = area_px * px_area_nm2
+    diameter_nm         = 2.0 * np.sqrt(area_nm2 / np.pi)
+    diameter_px         = 2.0 * np.sqrt(area_px / np.pi)
+    equivalent_radius   = np.sqrt(area_nm2 / np.pi)
+    perimeter_nm_arr    = perimeter_px_arr * px_length_nm
+    major_nm            = major_px * px_length_nm
+    minor_nm            = minor_px * px_length_nm
+    with np.errstate(divide='ignore', invalid='ignore'):
+        aspect_ratio = np.where(minor_px > 0, major_px / minor_px, 1.0)
+    orientation_deg     = orientation * (180.0 / np.pi)
+    convex_area_nm2     = convex_area * px_area_nm2
+
+    # Centroid in nm
+    cx_nm = cent_x * xp_nm
+    cy_nm = cent_y * yp_nm
+
+    # ── Centroid height: vectorised lookup ──
+    cy_int = np.clip(np.round(cent_y).astype(int), 0, H - 1)
+    cx_int = np.clip(np.round(cent_x).astype(int), 0, W - 1)
+    centroid_h = height[cy_int, cx_int]
+
+    # ── Volume: single-pass ndi_sum ──
+    all_volumes = np.atleast_1d(
+        ndi_sum(height, labels, index=label_ids)
+    ) * px_area_nm2
+
+    # ── Height std: E[X²] − E[X]²  (ddof=0, matches np.std default) ──
+    all_sum_sq = np.atleast_1d(
+        ndi_sum(height ** 2, labels, index=label_ids)
+    )
+    variance = np.maximum(all_sum_sq / area_px - i_mean ** 2, 0.0)
+    i_std = np.sqrt(variance)
+
+    # ── Peak positions: single-pass maximum_position ──
+    all_peak_pos = maximum_position(height, labels, index=label_ids)
+    # maximum_position returns a single tuple when index is scalar
+    if n == 1:
+        all_peak_pos = [all_peak_pos]
+    peak_y = np.array([p[0] for p in all_peak_pos], dtype=int)
+    peak_x = np.array([p[1] for p in all_peak_pos], dtype=int)
+    peak_h = height[peak_y, peak_x]
+
+    peak_x_nm = peak_x.astype(float) * xp_nm
+    peak_y_nm = peak_y.astype(float) * yp_nm
+
+    # ── Peak-to-centroid distance (vectorised) ──
+    p2c_dist = np.sqrt((peak_x_nm - cx_nm) ** 2 + (peak_y_nm - cy_nm) ** 2)
+
+    # ── Build list of dicts from pre-computed arrays ──
     individual_grains = []
-    
-    for idx in range(len(props['label'])):
-        area_px = float(props['area'][idx])
-        
-        # Skip small grains
-        if area_px < min_pixel_area:
-            continue
-        
-        lab_id = int(props['label'][idx])
-        mask = (labels == lab_id)
-        
-        if not np.any(mask):
-            continue
-        
-        # Basic properties
-        area_nm2 = area_px * px_area_nm2
-        diameter_nm = 2.0 * math.sqrt(area_nm2 / math.pi)
-        
-        # Centroid
-        cent_y = props['centroid-0'][idx]
-        cent_x = props['centroid-1'][idx]
-        cx_nm = float(cent_x) * xp_nm
-        cy_nm = float(cent_y) * yp_nm
-        
-        # Centroid in pixels
-        centroid_x_px = float(cent_x)
-        centroid_y_px = float(cent_y)
-        
-        # Centroid height (height value at centroid position)
-        cent_y_int = int(round(cent_y))
-        cent_x_int = int(round(cent_x))
-        # Ensure within bounds
-        cent_y_int = max(0, min(cent_y_int, height.shape[0] - 1))
-        cent_x_int = max(0, min(cent_x_int, height.shape[1] - 1))
-        centroid_height_nm = float(height[cent_y_int, cent_x_int])
-        
-        # Peak location
-        ys, xs = np.nonzero(mask)
-        if ys.size > 0:
-            vals = height[ys, xs]
-            kmax = int(np.argmax(vals))
-            pr, pc = int(ys[kmax]), int(xs[kmax])
-        else:
-            pr, pc = cent_y_int, cent_x_int
-        
-        peak_x_nm = float(pc) * xp_nm
-        peak_y_nm = float(pr) * yp_nm
-        peak_h_nm = float(height[pr, pc])
-        
-        # Peak position in pixels
-        peak_x_px = float(pc)
-        peak_y_px = float(pr)
-        
-        # Peak to centroid distance
-        peak_to_centroid_dist_nm = math.sqrt(
-            ((peak_x_nm - cx_nm) ** 2) + ((peak_y_nm - cy_nm) ** 2)
-        )
-        
-        # Volume
-        vol_nm3 = float(np.sum(height[mask]) * px_area_nm2)
-        
-        # Shape properties
-        major_axis_px = float(props['major_axis_length'][idx])
-        minor_axis_px = float(props['minor_axis_length'][idx])
-        major_axis_nm = major_axis_px * px_length_nm
-        minor_axis_nm = minor_axis_px * px_length_nm
-        aspect_ratio = major_axis_px / minor_axis_px if minor_axis_px > 0 else 1.0
-        
-        # Perimeter in pixels
-        perimeter_px = float(props['perimeter'][idx])
-        perimeter_nm = perimeter_px * px_length_nm
-        
-        # Diameter in pixels
-        diameter_px = 2.0 * math.sqrt(area_px / math.pi)
-        
-        # Equivalent radius (from area)
-        equivalent_radius_nm = math.sqrt(area_nm2 / math.pi)
-        
-        # Height statistics
-        vals_mask = height[mask]
-        
-        grain_data = {
-            'grain_id': lab_id,
-            'area_px': area_px,
-            'area_nm2': area_nm2,
-            'diameter_nm': diameter_nm,
-            'diameter_px': diameter_px,
-            'equivalent_radius_nm': equivalent_radius_nm,
-            'volume_nm3': vol_nm3,
-            'centroid_x_nm': cx_nm,
-            'centroid_y_nm': cy_nm,
-            'centroid_x_px': centroid_x_px,
-            'centroid_y_px': centroid_y_px,
-            'centroid_height_nm': centroid_height_nm,
-            'peak_x_nm': peak_x_nm,
-            'peak_y_nm': peak_y_nm,
-            'peak_x_px': peak_x_px,
-            'peak_y_px': peak_y_px,
-            'peak_height_nm': peak_h_nm,
-            'peak_to_centroid_dist_nm': peak_to_centroid_dist_nm,
-            'height_mean_nm': float(np.mean(vals_mask)),
-            'height_std_nm': float(np.std(vals_mask)),
-            'height_min_nm': float(np.min(vals_mask)),
-            'height_max_nm': float(np.max(vals_mask)),
-            'major_axis_nm': major_axis_nm,
-            'minor_axis_nm': minor_axis_nm,
-            'aspect_ratio': aspect_ratio,
-            'orientation_deg': float(props['orientation'][idx]) * 180.0 / math.pi,
-            'perimeter_nm': perimeter_nm,
-            'perimeter_px': perimeter_px,
-            'eccentricity': float(props['eccentricity'][idx]),
-            'solidity': float(props['solidity'][idx]),
-            'convex_area_nm2': float(props['convex_area'][idx]) * px_area_nm2,
-        }
-        
-        individual_grains.append(grain_data)
-    
+    for i in range(n):
+        individual_grains.append({
+            'grain_id':                int(label_ids[i]),
+            'area_px':                 float(area_px[i]),
+            'area_nm2':                float(area_nm2[i]),
+            'diameter_nm':             float(diameter_nm[i]),
+            'diameter_px':             float(diameter_px[i]),
+            'equivalent_radius_nm':    float(equivalent_radius[i]),
+            'volume_nm3':              float(all_volumes[i]),
+            'centroid_x_nm':           float(cx_nm[i]),
+            'centroid_y_nm':           float(cy_nm[i]),
+            'centroid_x_px':           float(cent_x[i]),
+            'centroid_y_px':           float(cent_y[i]),
+            'height_centroid_nm':      float(centroid_h[i]),
+            'peak_x_nm':              float(peak_x_nm[i]),
+            'peak_y_nm':              float(peak_y_nm[i]),
+            'peak_x_px':              float(peak_x[i]),
+            'peak_y_px':              float(peak_y[i]),
+            'height_peak_nm':          float(peak_h[i]),
+            'peak_to_centroid_dist_nm': float(p2c_dist[i]),
+            'height_mean_nm':          float(i_mean[i]),
+            'height_std_nm':           float(i_std[i]),
+            'height_min_nm':           float(i_min[i]),
+            'height_max_nm':           float(i_max[i]),
+            'major_axis_nm':           float(major_nm[i]),
+            'minor_axis_nm':           float(minor_nm[i]),
+            'aspect_ratio':            float(aspect_ratio[i]),
+            'orientation_deg':         float(orientation_deg[i]),
+            'perimeter_nm':            float(perimeter_nm_arr[i]),
+            'perimeter_px':            float(perimeter_px_arr[i]),
+            'eccentricity':            float(ecc[i]),
+            'solidity':                float(sol[i]),
+            'convex_area_nm2':         float(convex_area_nm2[i]),
+        })
+
     return individual_grains
 
 
@@ -482,10 +486,10 @@ def _empty_statistics() -> Dict[str, Any]:
         'std_height_nm': 0.0,
         'min_height_nm': 0.0,
         'max_height_nm': 0.0,
-        'mean_peak_height_nm': 0.0,
-        'std_peak_height_nm': 0.0,
-        'mean_centroid_height_nm': 0.0,
-        'std_centroid_height_nm': 0.0,
+        'mean_height_peak_nm': 0.0,
+        'std_height_peak_nm': 0.0,
+        'mean_height_centroid_nm': 0.0,
+        'std_height_centroid_nm': 0.0,
         'mean_volume_nm3': 0.0,
         'std_volume_nm3': 0.0,
         'grain_density': 0.0,

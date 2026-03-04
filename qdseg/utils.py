@@ -148,46 +148,40 @@ def check_tensorflow_gpu(verbose: bool = True) -> Tuple[bool, str]:
 
 
 def print_gpu_info():
-    """
-    GPU 환경 정보 출력
-    
-    PyTorch와 TensorFlow 모두의 GPU 상태를 확인하고 출력
-    
+    """Print GPU environment information for PyTorch and TensorFlow.
+
     Examples
     --------
     >>> print_gpu_info()
-    
-    🖥️  GPU 환경 정보:
+    GPU Environment:
     --------------------------------------------------
-       PyTorch 버전: 2.9.1
-       ✓ Apple Silicon MPS 가속 사용
-       PyTorch 디바이스: mps
-       TensorFlow 버전: 2.20.0
-       ✓ TensorFlow Metal GPU 사용 (Apple Silicon)
+    PyTorch version: 2.9.1
+    PyTorch device: mps
+    TensorFlow version: 2.20.0
     --------------------------------------------------
     """
-    print("\n🖥️  GPU 환경 정보:")
+    print("\nGPU Environment:")
     print("-" * 50)
-    
+
     # PyTorch
     try:
         import torch
-        print(f"   PyTorch 버전: {torch.__version__}")
+        print(f"  PyTorch version: {torch.__version__}")
         device = get_torch_device(verbose=True)
-        print(f"   PyTorch 디바이스: {device}")
+        print(f"  PyTorch device: {device}")
     except ImportError:
-        print("   PyTorch: 설치되지 않음")
-    
+        print("  PyTorch: not installed")
+
     print()
-    
+
     # TensorFlow
     try:
         import tensorflow as tf
-        print(f"   TensorFlow 버전: {tf.__version__}")
+        print(f"  TensorFlow version: {tf.__version__}")
         check_tensorflow_gpu(verbose=True)
     except ImportError:
-        print("   TensorFlow: 설치되지 않음")
-    
+        print("  TensorFlow: not installed")
+
     print("-" * 50)
 
 
@@ -213,73 +207,39 @@ def nm2_to_px_area(area_nm2: float, pixel_nm: Tuple[float, float]) -> int:
 
 
 def apply_grain_excluded_flat_correction(
-    height_data: np.ndarray, 
+    height_data: np.ndarray,
     grain_mask: np.ndarray,
-    grain_labels: np.ndarray
+    grain_labels: np.ndarray,
 ) -> np.ndarray:
-    """
-    Grain 영역을 제외하고 flat 보정을 적용
-    
+    """Apply line-by-line flat correction, excluding grain regions.
+
+    .. deprecated::
+        Use ``AFMData.flat_correction(method='line_by_line', mask=grain_mask)``
+        instead, which is equivalent and avoids the row/column interference
+        that the previous implementation produced.
+
     Parameters
     ----------
     height_data : np.ndarray
-        보정할 높이 데이터 (after_slope_correction)
+        Height data after slope correction.
     grain_mask : np.ndarray
-        Grain 영역을 나타내는 마스크 (boolean)
+        Boolean mask — ``True`` where grains are.
     grain_labels : np.ndarray
-        Grain 라벨링된 데이터
-        
+        Label image (not used; kept for backward-compatibility).
+
     Returns
     -------
     np.ndarray
-        Grain 영역 제외 flat 보정된 데이터
+        Flat-corrected height data.
     """
-    height_corrected = height_data.copy()
-    
-    # Grain 영역이 아닌 배경 영역만 사용
-    background_mask = ~grain_mask
-    
-    if np.sum(background_mask) < height_data.size * 0.1:  # 배경이 너무 작으면
-        print("⚠️  Warning: Background area too small, using standard flat correction")
-        corrector = AFMCorrections()
-        corrector.set_flat_method("line_by_line")
-        return corrector.correct_flat(height_corrected)
-    
-    # 외곽선 경계에서 기준값 계산 (grain 제외)
-    boundary_mask = np.zeros_like(grain_mask)
-    boundary_width = max(2, min(height_data.shape) // 50)
-    
-    # 상하좌우 외곽선 생성
-    boundary_mask[:boundary_width, :] = True  # 상단
-    boundary_mask[-boundary_width:, :] = True  # 하단
-    boundary_mask[:, :boundary_width] = True  # 좌측
-    boundary_mask[:, -boundary_width:] = True  # 우측
-    
-    # Grain 제외된 외곽선만 사용
-    reference_mask = background_mask & boundary_mask
-    
-    if np.sum(reference_mask) > 0:
-        reference_level = np.mean(height_data[reference_mask])
-        height_corrected = height_data - reference_level
-    else:
-        # 외곽선에서 참조를 구할 수 없으면 전체 배경 사용
-        reference_level = np.mean(height_data[background_mask])
-        height_corrected = height_data - reference_level
-    
-    # 라인별 최종 평면 보정 (배경 영역만 적용)
-    for i in range(height_data.shape[0]):
-        row_mask = background_mask[i, :]
-        if np.sum(row_mask) > 0:
-            row_avg = np.mean(height_corrected[i, row_mask])
-            if not np.isnan(row_avg):
-                height_corrected[i, :] -= row_avg
-    
-    for j in range(height_data.shape[1]):
-        col_mask = background_mask[:, j]
-        if np.sum(col_mask) > 0:
-            col_avg = np.mean(height_corrected[:, col_mask])
-            if not np.isnan(col_avg):
-                height_corrected[:, j] -= col_avg
-    
-    return height_corrected
+    import warnings
+    warnings.warn(
+        "apply_grain_excluded_flat_correction is deprecated. "
+        "Use AFMData.flat_correction(method='line_by_line', mask=grain_mask) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    corrector = AFMCorrections()
+    corrector.set_flat_method("line_by_line")
+    return corrector.correct_flat(height_data, mask=grain_mask.astype(int))
 
