@@ -5,11 +5,12 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="qdseg",
-    version="0.3.1",
+    version="0.3.2",
     description="Quantum Dot Segmentation and Analysis Tool for AFM/XQD files",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="jkkwoen",
+    author_email="jk.kwoen@gmail.com",
     url="https://github.com/jkkwoen/qdseg",
     packages=find_packages(),
     classifiers=[
@@ -27,7 +28,6 @@ setup(
         "scipy>=1.10.0",
         "scikit-learn>=1.3.0",
         "scikit-image>=0.20.0",
-        "python-dotenv>=1.0.0",
     ],
     extras_require={
         "stardist": [
@@ -35,20 +35,33 @@ setup(
             "tensorflow>=2.10.0",
         ],
         "cellpose": [
-            "cellpose>=3.0.0",
+            "cellpose>=4.0.0",
+        ],
+        "cellulus": [
+            "torch>=2.0.0",
+            "zarr>=2.16.0",
+            "tqdm>=4.65.0",
         ],
         "training": [
             "torch>=2.0.0",
             "zarr>=2.16.0",
             "tqdm>=4.65.0",
+            "python-dotenv>=1.0.0",
+        ],
+        "mac-gpu": [
+            "tensorflow>=2.16.0,<2.19",
+            "tensorflow-metal",
+            "stardist>=0.8.0",
+            "cellpose>=4.0.0",
         ],
         "all": [
             "stardist>=0.8.0",
             "tensorflow>=2.10.0",
-            "cellpose>=3.0.0",
+            "cellpose>=4.0.0",
             "torch>=2.0.0",
             "zarr>=2.16.0",
             "tqdm>=4.65.0",
+            "python-dotenv>=1.0.0",
         ],
     },
     python_requires=">=3.12,<3.13",
