@@ -1,18 +1,17 @@
 """
-High-level grain analysis pipeline.
+Main analysis function for grain analysis
 
-Combines segmentation and statistics into a single callable API.
+High-level pipeline that combines segmentation and statistics.
 
-Examples
---------
->>> from qdseg import analyze_grains
->>> result = analyze_grains(height, meta, method="rule_based")
->>> print(f"Found {result['stats']['num_grains']} grains")
+사용 예시:
+    >>> from grain_analyzer import analyze_grains
+    >>> result = analyze_grains(height, meta, method="classical")
 """
 
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
+import matplotlib.pyplot as plt
 
 from .afm_data_wrapper import AFMData
 from .segmentation import (
@@ -25,71 +24,6 @@ from .segmentation import (
 )
 from .statistics import calculate_grain_statistics, get_individual_grains
 from skimage.segmentation import find_boundaries
-from skimage.measure import regionprops, label as sk_label
-
-
-_METHOD_ALIASES = {
-    'classical': 'rule_based',
-    'advanced_watershed': 'rule_based',
-    'simple_watershed': 'watershed',
-}
-
-
-def _normalize_method(method: str) -> str:
-    """Resolve legacy method names to their current equivalents."""
-    return _METHOD_ALIASES.get(method.lower(), method.lower())
-
-
-_SEGMENTATION_FUNCTIONS = {
-    'rule_based': segment_rule_based,
-    'watershed': segment_watershed,
-    'thresholding': segment_thresholding,
-    'stardist': segment_stardist,
-    'cellpose': segment_cellpose,
-    'cellulus': segment_cellulus,
-}
-
-_DL_METHODS = {'stardist', 'cellpose', 'cellulus'}
-
-
-def _dispatch_segmentation(
-    method: str,
-    height: np.ndarray,
-    meta: Optional[Dict],
-    min_area_px: int = 0,
-    **kwargs,
-) -> np.ndarray:
-    """Run the named segmentation method and return labels.
-
-    For DL methods, ``_filter_small_labels`` is applied automatically.
-    """
-    method = _normalize_method(method)
-    func = _SEGMENTATION_FUNCTIONS.get(method)
-    if func is None:
-        raise ValueError(
-            f"Unknown method: {method}. "
-            f"Supported: {', '.join(sorted(_SEGMENTATION_FUNCTIONS))}"
-        )
-    labels = func(height, meta, **kwargs)
-    if method in _DL_METHODS and min_area_px > 0:
-        labels = _filter_small_labels(labels, min_area_px)
-    return labels
-
-
-def _filter_small_labels(labels: np.ndarray, min_area_px: int) -> np.ndarray:
-    """Remove labeled regions smaller than *min_area_px* and re-label consecutively.
-
-    This post-processing step ensures deep-learning segmentation results are
-    filtered to the same minimum-area criterion as the rule-based method.
-    """
-    if min_area_px <= 0 or labels.max() == 0:
-        return labels
-    small_ids = {p.label for p in regionprops(labels) if p.area < min_area_px}
-    if not small_ids:
-        return labels
-    filtered = labels.copy()
-    filtered[np.isin(labels, list(small_ids))] = 0
-    return sk_label(filtered > 0).astype(np.int32)
 
 
 def analyze_grains(
@@ -139,11 +73,37 @@ def analyze_grains(
     >>> # With StarDist
     >>> result = analyze_grains(height, meta, method="stardist", prob_thresh=0.6)
     """
-    labels = _dispatch_segmentation(method, height, meta, **kwargs)
+    # Method mapping for backward compatibility
+    method_map = {
+        'classical': 'rule_based',
+        'advanced_watershed': 'rule_based',
+        'simple_watershed': 'watershed',
+    }
+    method = method_map.get(method.lower(), method.lower())
 
-    # Compute per-grain data once, then pass into statistics to avoid double work
+    # Select segmentation method
+    if method == "rule_based":
+        labels = segment_rule_based(height, meta, **kwargs)
+    elif method == "watershed":
+        labels = segment_watershed(height, meta, **kwargs)
+    elif method == "thresholding":
+        labels = segment_thresholding(height, meta, **kwargs)
+    elif method == "stardist":
+        labels = segment_stardist(height, meta, **kwargs)
+    elif method == "cellpose":
+        labels = segment_cellpose(height, meta, **kwargs)
+    elif method == "cellulus":
+        labels = segment_cellulus(height, meta, **kwargs)
+    else:
+        raise ValueError(
+            f"Unknown method: {method}. "
+            f"Supported methods: 'rule_based', 'watershed', 'thresholding', "
+            f"'stardist', 'cellpose', 'cellulus'"
+        )
+
+    # Calculate statistics
+    stats = calculate_grain_statistics(labels, height, meta)
     grains = get_individual_grains(labels, height, meta)
-    stats = calculate_grain_statistics(labels, height, meta, _precomputed_grains=grains)
 
     return {
         "labels": labels,
@@ -195,19 +155,19 @@ def analyze_single_file_with_grain_data(
     """
     from .utils import nm2_to_px_area
     
-    print(f"Processing: {xqd_file.name}")
-
+    print(f"📊 Processing: {xqd_file.name}")
+    
     try:
         # Load data using AFMData
         data = AFMData(str(xqd_file))
-        print(f"  Data loaded: {data.get_data().shape}")
-
+        print(f"   ✓ Data loaded: {data.get_data().shape}")
+        
         # Create output directory for this file
         file_output_dir = output_dir / xqd_file.stem
         file_output_dir.mkdir(parents=True, exist_ok=True)
-
+        
         # Apply corrections
-        print("  Applying corrections...")
+        print("   🔬 Applying corrections...")
         data.first_correction().second_correction().third_correction()
         data.flat_correction("line_by_line").baseline_correction("min_to_zero")
         
@@ -223,38 +183,61 @@ def analyze_single_file_with_grain_data(
         # Calculate min_area_px (for classical method)
         min_area_px = nm2_to_px_area(min_area_nm2, pixel_nm)
         
-        method = _normalize_method(method)
+        # Method mapping for backward compatibility
+        method_map = {
+            'classical': 'rule_based',
+            'advanced_watershed': 'rule_based',
+            'simple_watershed': 'watershed',
+        }
+        method = method_map.get(method.lower(), method.lower())
 
         # Perform segmentation
-        print(f"  Performing {method} grain segmentation...")
+        print(f"   🔬 Performing {method} grain segmentation...")
 
-        # Build method-specific kwargs
-        seg_kwargs = dict(kwargs)
-        if method in ('rule_based', 'watershed'):
-            seg_kwargs.setdefault('gaussian_sigma', gaussian_sigma)
-        if method in ('rule_based', 'watershed', 'thresholding'):
-            seg_kwargs.setdefault('min_area_px', min_area_px)
-        if method == 'rule_based':
-            seg_kwargs.setdefault('min_peak_separation_nm', min_peak_separation_nm)
-
-        labels = _dispatch_segmentation(
-            method, height_corrected, meta,
-            min_area_px=min_area_px,
-            **seg_kwargs,
-        )
+        if method == "rule_based":
+            labels = segment_rule_based(
+                height_corrected,
+                meta,
+                gaussian_sigma=gaussian_sigma,
+                min_area_px=min_area_px,
+                min_peak_separation_nm=min_peak_separation_nm,
+            )
+        elif method == "watershed":
+            labels = segment_watershed(
+                height_corrected,
+                meta,
+                gaussian_sigma=gaussian_sigma,
+                min_area_px=min_area_px,
+            )
+        elif method == "thresholding":
+            labels = segment_thresholding(
+                height_corrected,
+                meta,
+                min_area_px=min_area_px,
+            )
+        elif method == "stardist":
+            labels = segment_stardist(height_corrected, meta, **kwargs)
+        elif method == "cellpose":
+            labels = segment_cellpose(height_corrected, meta, **kwargs)
+        elif method == "cellulus":
+            labels = segment_cellulus(height_corrected, meta, **kwargs)
+        else:
+            raise ValueError(
+                f"Unknown method: {method}. "
+                f"Supported methods: 'rule_based', 'watershed', 'thresholding', "
+                f"'stardist', 'cellpose', 'cellulus'"
+            )
         
         num_grains = int(labels.max())
-        print(f"  Segmentation completed: {num_grains} grains detected")
-
-        # Calculate statistics (compute grains once, pass into stats)
-        print("  Calculating grain statistics...")
+        print(f"   ✓ Segmentation completed: {num_grains} grains detected")
+        
+        # Calculate statistics
+        print("   📊 Calculating grain statistics...")
+        grain_stats = calculate_grain_statistics(labels, height_corrected, meta)
         individual_grain_data = get_individual_grains(labels, height_corrected, meta)
-        grain_stats = calculate_grain_statistics(
-            labels, height_corrected, meta, _precomputed_grains=individual_grain_data
-        )
-
+        
         # Create PDF
-        print("  Creating PDF plot...")
+        print("   📄 Creating PDF plot...")
         grain_mask = labels > 0
         boundaries = find_boundaries(labels, mode="outer") if num_grains > 0 else np.zeros_like(labels, dtype=bool)
         
@@ -263,11 +246,11 @@ def analyze_single_file_with_grain_data(
             xqd_file.stem, file_output_dir, extent, num_grains, method
         )
         
-        print(f"  Analysis completed for {xqd_file.name}")
+        print(f"   ✅ Analysis completed for {xqd_file.name}")
         return True, individual_grain_data, grain_stats, str(pdf_path)
-
+        
     except Exception as e:
-        print(f"  Error processing {xqd_file.name}: {e}")
+        print(f"   ❌ Error processing {xqd_file.name}: {e}")
         import traceback
         traceback.print_exc()
         return False, None, None, None
@@ -286,7 +269,6 @@ def _create_grain_analysis_pdf(
     method: str = "classical"
 ) -> Path:
     """Create PDF with original and grain_mask plots."""
-    import matplotlib.pyplot as plt
     
     pdf_path = output_dir / f"{stem}_grain_analysis_{method}.pdf"
     

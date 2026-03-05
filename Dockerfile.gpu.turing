@@ -1,0 +1,88 @@
+# qdseg GPU Dockerfile — Turing architecture (RTX 2080 Ti, sm_75)
+# Target: CUDA 12.2 / Driver 590+ / Python 3.12
+#
+# Build:  docker build -f Dockerfile.gpu.turing -t qdseg-gpu-turing .
+# Run:    docker run --rm --gpus all -v /path/to/data:/data qdseg-gpu-turing \
+#           python3 benchmark_gpu.py --json /data/results.json
+
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# System deps + Python 3.12 via deadsnakes PPA
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        software-properties-common curl \
+        libgl1 libglib2.0-0 \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3.12 python3.12-venv python3.12-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && update-alternatives --set python3 /usr/bin/python3.12
+
+# pip for Python 3.12
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
+    && ln -sf /usr/local/bin/pip3.12 /usr/local/bin/pip3 \
+    && ln -sf /usr/local/bin/pip3.12 /usr/local/bin/pip
+
+WORKDIR /app
+
+# PyTorch (cu121 wheels work with CUDA 12.2)
+RUN pip install --no-cache-dir \
+    torch==2.3.1+cu121 torchvision==0.18.1+cu121 \
+    --extra-index-url https://download.pytorch.org/whl/cu121
+
+# TensorFlow + segmentation deps
+COPY constraints-gpu-turing.txt /app/
+RUN pip install --no-cache-dir -c constraints-gpu-turing.txt \
+    tensorflow==2.17.0 \
+    stardist==0.9.2 \
+    cellpose==4.0.8 \
+    scikit-image==0.24.0 \
+    scikit-learn==1.5.2 \
+    scipy==1.13.1 \
+    matplotlib>=3.7.0 \
+    nvidia-cuda-nvcc-cu12
+
+# cuCIM + CuPy for GPU-accelerated classical segmentation
+# Pin cupy to 13.x to stay compatible with numpy==1.26.4 (cupy 14+ requires numpy 2.x)
+RUN pip install --no-cache-dir -c constraints-gpu-turing.txt \
+    "cupy-cuda12x==13.3.0" \
+    "cucim-cu12==24.10.0"
+
+# Fix CuPy JIT: nvidia-cuda-nvcc-cu12 provides nvcc binary but not full CUDA headers.
+# nvidia-cuda-runtime-cu12 (installed as cupy dep) has vector_types.h and other runtime
+# headers. Merge them into cuda_nvcc/include/ so CUDA_PATH/include/ is complete.
+RUN cp -rn /usr/local/lib/python3.12/dist-packages/nvidia/cuda_runtime/include/* \
+           /usr/local/lib/python3.12/dist-packages/nvidia/cuda_nvcc/include/
+
+# Pre-download DL model weights into the image (eliminates download on first run)
+ARG MODEL_CACHE_DATE=2026-03-05
+# CellPose cpsam model (~1.15 GB) — cellpose 4.x defaults to cpsam when no model_type given
+# Note: heredoc not reliable with legacy Docker builder — use single-line -c
+RUN python3 -c "from cellpose import models; import os; m = models.CellposeModel(gpu=False); files = os.listdir(models.MODEL_DIR); print('[OK] CellPose model downloaded:', files)"
+# StarDist 2D_versatile_fluo (~50 MB)
+RUN python3 -c "from stardist.models import StarDist2D; StarDist2D.from_pretrained('2D_versatile_fluo'); print('[OK] StarDist 2D_versatile_fluo downloaded')"
+
+# Install qdseg (use constraints to prevent numpy/cupy version drift)
+COPY . /app/qdseg_src
+RUN pip install --no-cache-dir -c constraints-gpu-turing.txt /app/qdseg_src
+
+ENV MPLCONFIGDIR=/tmp/matplotlib_cache
+ENV PYTHONUNBUFFERED=1
+# Limit TF GPU memory so CellPose cpsam (PyTorch) can coexist on 11 GB VRAM.
+# StarDist 2D_versatile_fluo needs ~1 GB; 5 GB cap leaves ~6 GB for cpsam.
+# Without this, TF's BFC allocator fragments VRAM and cpsam fails with OOM.
+# Override: docker run -e QDSEG_TF_MEMORY_MB=8192 ... (adjust to GPU VRAM)
+ENV QDSEG_TF_MEMORY_MB=5120
+
+# Fix: TF 2.17 uses pip-installed nvidia-cuda-nvcc-cu12 for ptxas.
+# Without PATH/XLA_FLAGS, TF falls back to driver PTX JIT which fails on older drivers.
+ENV NVIDIA_SITE=/usr/local/lib/python3.12/dist-packages/nvidia
+ENV PATH=${NVIDIA_SITE}/cuda_nvcc/bin:${PATH}
+ENV XLA_FLAGS=--xla_gpu_cuda_data_dir=${NVIDIA_SITE}/cuda_nvcc
+ENV LD_LIBRARY_PATH=${NVIDIA_SITE}/cuda_nvcc/lib:${NVIDIA_SITE}/cuda_runtime/lib:${LD_LIBRARY_PATH}
+# CuPy: point to pip-installed CUDA headers so JIT kernel compilation works on runtime image
+ENV CUDA_PATH=${NVIDIA_SITE}/cuda_nvcc
+ENV CUPY_CUDA_PER_THREAD_DEFAULT_STREAM=1

@@ -1,8 +1,8 @@
 # qdseg GPU Dockerfile for Blackwell (sm_120) GPUs
 # Base: NGC TensorFlow 2.17 + CUDA 12.8 (only image with working Blackwell PTX)
 #
-# Build:  docker build -f Dockerfile.gpu -t qdseg-gpu .
-# Run:    docker run --rm --gpus all -v /path/to/data:/data qdseg-gpu \
+# Build:  docker build -f Dockerfile.gpu -t qdseg-gpu-blackwell .
+# Run:    docker run --rm --gpus all -v /path/to/data:/data qdseg-gpu-blackwell \
 #           python3 -c "from qdseg import analyze_grains; ..."
 
 FROM nvcr.io/nvidia/tensorflow:25.02-tf2-py3
@@ -21,6 +21,30 @@ RUN pip install --no-cache-dir -c constraints-gpu.txt \
     scikit-image==0.26.0 \
     scikit-learn==1.8.0 \
     scipy==1.17.0
+
+# cuCIM + CuPy for GPU-accelerated classical segmentation
+# cupy 14.x requires numpy>=2.0; pin 13.x for numpy==1.26.4 compatibility (see constraints-gpu.txt)
+RUN pip install --no-cache-dir -c constraints-gpu.txt \
+    "cupy-cuda12x==13.3.0" \
+    "cucim-cu12==24.10.0"
+
+# Pre-download DL model weights into the image (eliminates ~110s download on first run)
+# Dummy ARG forces cache-busting for the download steps on rebuild
+ARG MODEL_CACHE_DATE=2026-03-05
+# CellPose cpsam model (~1.15 GB) — gpu=False is fine; only weights are downloaded here
+RUN python3 - <<'EOF'
+from cellpose import models
+import os
+m = models.CellposeModel(gpu=False)
+files = os.listdir(models.MODEL_DIR)
+print(f"[OK] CellPose model downloaded: {files}")
+EOF
+# StarDist 2D_versatile_fluo (~50 MB)
+RUN python3 - <<'EOF'
+from stardist.models import StarDist2D
+StarDist2D.from_pretrained('2D_versatile_fluo')
+print("[OK] StarDist 2D_versatile_fluo downloaded")
+EOF
 
 # Install qdseg
 COPY . /app/qdseg_src

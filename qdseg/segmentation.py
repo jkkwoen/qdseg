@@ -38,20 +38,23 @@ def _ensure_tf_device(use_gpu: bool = True) -> None:
     supported by the installed TF build (e.g. Blackwell sm_120 with
     TF <= 2.22).
     """
-    global _force_tf_cpu
+    global _force_tf_cpu, _tf_gpu_initialized
     if use_gpu:
         _force_tf_cpu = False
-        try:
-            from .utils import setup_gpu_environment, check_tensorflow_gpu
-            setup_gpu_environment()
-            check_tensorflow_gpu(verbose=False)
-        except ImportError:
-            pass
+        if not _tf_gpu_initialized:
+            try:
+                from .utils import setup_gpu_environment, check_tensorflow_gpu
+                setup_gpu_environment()
+                check_tensorflow_gpu(verbose=False)
+                _tf_gpu_initialized = True
+            except ImportError:
+                pass
     else:
         _force_tf_cpu = True
 
 
 _force_tf_cpu: bool = False
+_tf_gpu_initialized: bool = False
 
 
 class _tf_cpu_context:
@@ -93,6 +96,7 @@ def segment_rule_based(
     gaussian_sigma: float = 1.0,
     min_area_px: int = 10,
     min_peak_separation_nm: float = 10.0,
+    use_gpu: Optional[bool] = None,
 ) -> np.ndarray:
     """
     Rule-based segmentation: Otsu + Distance Transform + DBSCAN + Voronoi
@@ -128,6 +132,30 @@ def segment_rule_based(
     """
     pixel_nm = meta.get("pixel_nm", (1.0, 1.0)) if meta else (1.0, 1.0)
     xp_nm, yp_nm = float(pixel_nm[0]), float(pixel_nm[1])
+
+    # GPU dispatch — use_gpu=None means "try GPU silently, fall back to CPU"
+    _try_gpu = use_gpu if use_gpu is not None else True
+    if _try_gpu:
+        try:
+            from ._classical_gpu import is_gpu_available, segment_rule_based_gpu
+            if is_gpu_available():
+                return segment_rule_based_gpu(
+                    height, meta,
+                    gaussian_sigma=gaussian_sigma,
+                    min_area_px=min_area_px,
+                    min_peak_separation_nm=min_peak_separation_nm,
+                )
+            elif use_gpu is True:
+                warnings.warn(
+                    "use_gpu=True but cuCIM/CuPy not available. Falling back to CPU.",
+                    RuntimeWarning, stacklevel=2,
+                )
+        except Exception as exc:
+            if use_gpu is True:
+                warnings.warn(
+                    f"GPU segmentation failed ({exc}). Falling back to CPU.",
+                    RuntimeWarning, stacklevel=2,
+                )
 
     # 1. Smoothing + Thresholding
     h_smooth = gaussian(height, sigma=gaussian_sigma, preserve_range=True)
@@ -185,7 +213,8 @@ def segment_watershed(
     *,
     gaussian_sigma: float = 1.0,
     min_distance: int = 5,
-    min_area_px: int = 20
+    min_area_px: int = 20,
+    use_gpu: Optional[bool] = None,
 ) -> np.ndarray:
     """
     Watershed-based grain segmentation
@@ -219,6 +248,30 @@ def segment_watershed(
     >>> labels = segment_watershed(height)
     >>> labels = segment_watershed(height, min_distance=10)
     """
+    # GPU dispatch
+    _try_gpu = use_gpu if use_gpu is not None else True
+    if _try_gpu:
+        try:
+            from ._classical_gpu import is_gpu_available, segment_watershed_gpu
+            if is_gpu_available():
+                return segment_watershed_gpu(
+                    height, meta,
+                    gaussian_sigma=gaussian_sigma,
+                    min_distance=min_distance,
+                    min_area_px=min_area_px,
+                )
+            elif use_gpu is True:
+                warnings.warn(
+                    "use_gpu=True but cuCIM/CuPy not available. Falling back to CPU.",
+                    RuntimeWarning, stacklevel=2,
+                )
+        except Exception as exc:
+            if use_gpu is True:
+                warnings.warn(
+                    f"GPU segmentation failed ({exc}). Falling back to CPU.",
+                    RuntimeWarning, stacklevel=2,
+                )
+
     from skimage import filters, morphology, segmentation
 
     # 1. Remove noise with Gaussian blur
@@ -267,7 +320,8 @@ def segment_thresholding(
     min_area_px: int = 20,
     closing_size: int = 3,
     use_distance_separation: bool = False,
-    min_distance: int = 5
+    min_distance: int = 5,
+    use_gpu: Optional[bool] = None,
 ) -> np.ndarray:
     """
     Thresholding-based grain segmentation
@@ -324,6 +378,33 @@ def segment_thresholding(
     >>> labels = segment_thresholding(height, threshold_method='manual', threshold_value=5.0)
     >>> labels = segment_thresholding(height, use_distance_separation=True, min_distance=10)
     """
+    # GPU dispatch
+    _try_gpu = use_gpu if use_gpu is not None else True
+    if _try_gpu:
+        try:
+            from ._classical_gpu import is_gpu_available, segment_thresholding_gpu
+            if is_gpu_available():
+                return segment_thresholding_gpu(
+                    height, meta,
+                    threshold_method=threshold_method,
+                    threshold_value=threshold_value,
+                    min_area_px=min_area_px,
+                    closing_size=closing_size,
+                    use_distance_separation=use_distance_separation,
+                    min_distance=min_distance,
+                )
+            elif use_gpu is True:
+                warnings.warn(
+                    "use_gpu=True but cuCIM/CuPy not available. Falling back to CPU.",
+                    RuntimeWarning, stacklevel=2,
+                )
+        except Exception as exc:
+            if use_gpu is True:
+                warnings.warn(
+                    f"GPU segmentation failed ({exc}). Falling back to CPU.",
+                    RuntimeWarning, stacklevel=2,
+                )
+
     from skimage import filters, morphology, segmentation
 
     # 1. Determine threshold

@@ -9,6 +9,7 @@ Includes GPU/Device auto-detection utilities:
 """
 
 import os
+import platform
 import warnings
 import numpy as np
 from typing import Tuple, Optional
@@ -112,29 +113,43 @@ def check_tensorflow_gpu(verbose: bool = True) -> Tuple[bool, str]:
     gpus = tf.config.list_physical_devices('GPU')
     
     if gpus:
-        # Allow GPU memory growth (prevent OOM)
-        for gpu in gpus:
-            try:
-                tf.config.experimental.set_memory_growth(gpu, True)
-            except RuntimeError:
-                pass
-        
-        # Distinguish between Metal (Apple Silicon) and CUDA
-        gpu_name = gpus[0].name if gpus else "Unknown"
-        
-        # Detect Apple Silicon Metal
+        # Allow GPU memory growth, or apply a hard cap if QDSEG_TF_MEMORY_MB is set.
+        # A hard cap is needed when TF (StarDist) must coexist with PyTorch (CellPose
+        # cpsam) on GPUs with limited VRAM (e.g. RTX 2080 Ti 11 GB).
         try:
-            # Recognized as Metal GPU if tensorflow-metal is installed
-            if any('GPU' in str(gpu) for gpu in gpus):
-                # Check if running on macOS
-                import platform
-                if platform.system() == 'Darwin' and platform.processor() == 'arm':
-                    msg = "✓ Using TensorFlow Metal GPU (Apple Silicon)"
-                else:
-                    msg = f"✓ Using TensorFlow CUDA GPU: {gpu_name}"
+            mem_limit_mb = int(os.environ.get('QDSEG_TF_MEMORY_MB', 0))
+        except ValueError:
+            warnings.warn(
+                f"Invalid QDSEG_TF_MEMORY_MB value '{os.environ.get('QDSEG_TF_MEMORY_MB')}'"
+                " — must be an integer MB. Falling back to GPU memory growth.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            mem_limit_mb = 0
+        if mem_limit_mb > 0:
+            for gpu in gpus:
+                try:
+                    tf.config.set_logical_device_configuration(
+                        gpu,
+                        [tf.config.LogicalDeviceConfiguration(memory_limit=mem_limit_mb)],
+                    )
+                except RuntimeError:
+                    pass  # already initialised — limit cannot be changed
+        else:
+            for gpu in gpus:
+                try:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+                except RuntimeError:
+                    pass
+
+        # Distinguish between Metal (Apple Silicon) and CUDA
+        gpu_name = gpus[0].name
+        if any('GPU' in str(gpu) for gpu in gpus):
+            if platform.system() == 'Darwin' and platform.processor() == 'arm':
+                msg = "✓ Using TensorFlow Metal GPU (Apple Silicon)"
             else:
-                msg = f"✓ Using TensorFlow GPU: {gpu_name}"
-        except Exception:
+                msg = f"✓ Using TensorFlow CUDA GPU: {gpu_name}"
+        else:
             msg = f"✓ Using TensorFlow GPU: {gpu_name}"
 
         if verbose:

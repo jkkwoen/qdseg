@@ -165,7 +165,7 @@ Automatically detected:
 
 | Hardware | Backend |
 |----------|---------|
-| NVIDIA GPU | CUDA (PyTorch / TensorFlow) |
+| NVIDIA GPU | CUDA (PyTorch / TensorFlow / CuPy) |
 | Apple Silicon | MPS (PyTorch) / Metal (TensorFlow) |
 | CPU | Fallback |
 
@@ -173,6 +173,42 @@ Automatically detected:
 from qdseg import print_gpu_info
 print_gpu_info()
 ```
+
+### Docker images (NVIDIA GPU)
+
+Two pre-built Docker images are maintained for server deployment:
+
+| Image | Target | CUDA |
+|-------|--------|------|
+| `qdseg-gpu-blackwell` | RTX PRO 6000, RTX 5090 (sm_120) | 12.8 |
+| `qdseg-gpu-turing` | RTX 2080 Ti (sm_75) | 12.2 |
+
+Both images include pre-baked model weights (CellPose cpsam, StarDist
+2D_versatile_fluo) to eliminate first-run downloads.
+
+```bash
+# Build (Turing example)
+docker build -f Dockerfile.gpu.turing -t qdseg-gpu-turing .
+
+# Run benchmark
+docker run --rm --gpus all -v /path/to/xqd:/data/xqd qdseg-gpu-turing \
+    python3 /app/qdseg_src/benchmark_full_pipeline.py --data-dir /data/xqd
+```
+
+See [GPU_DOCKER.md](GPU_DOCKER.md) for full build/run instructions, benchmark
+results, and troubleshooting.
+
+### `QDSEG_TF_MEMORY_MB`
+
+On GPUs with ≤ 16 GB VRAM, TensorFlow (StarDist) and PyTorch (CellPose cpsam)
+can collide for GPU memory. Set this environment variable to cap TF's allocation:
+
+```bash
+docker run --rm --gpus all -e QDSEG_TF_MEMORY_MB=5120 ...
+```
+
+Default in `Dockerfile.gpu.turing`: 5120 MB. Not set in `Dockerfile.gpu` (96 GB
+VRAM — no limit needed).
 
 ---
 
