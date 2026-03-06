@@ -232,10 +232,10 @@ def analyze_single_file_with_grain_data(
         num_grains = int(labels.max())
         print(f"   ✓ Segmentation completed: {num_grains} grains detected")
 
-        # Calculate statistics
+        # Calculate statistics (get_individual_grains once, reuse in calculate_grain_statistics)
         print("   📊 Calculating grain statistics...")
-        grain_stats = calculate_grain_statistics(labels, height_corrected, meta)
         individual_grain_data = get_individual_grains(labels, height_corrected, meta)
+        grain_stats = calculate_grain_statistics(labels, height_corrected, meta, _precomputed_grains=individual_grain_data)
 
         # Create PDF (optional)
         pdf_path = None
