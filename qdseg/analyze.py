@@ -120,6 +120,7 @@ def analyze_single_file_with_grain_data(
     gaussian_sigma: float = 1.0,
     min_area_nm2: float = 78.5,
     min_peak_separation_nm: float = 10.0,
+    save_pdf: bool = True,
     **kwargs
 ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[str]]:
     """
@@ -130,7 +131,7 @@ def analyze_single_file_with_grain_data(
     xqd_file : Path
         Path to the XQD file
     output_dir : Path
-        Output directory for PDF file
+        Output directory for PDF file (only used when save_pdf=True)
     method : str
         Segmentation method (default: 'rule_based')
         - 'rule_based': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
@@ -145,6 +146,9 @@ def analyze_single_file_with_grain_data(
         Minimum grain area in nm²
     min_peak_separation_nm : float
         Minimum peak separation in nm (for rule_based method)
+    save_pdf : bool
+        Whether to generate and save a PDF report (default: True).
+        Set to False to skip PDF generation and improve performance.
     **kwargs
         Additional arguments for segmentation (method-specific)
 
@@ -152,20 +156,17 @@ def analyze_single_file_with_grain_data(
     -------
     Tuple[bool, Optional[Dict], Optional[Dict], Optional[str]]
         (success, individual_grain_data, grain_stats, pdf_path)
+        pdf_path is None when save_pdf=False
     """
     from .utils import nm2_to_px_area
-    
+
     print(f"📊 Processing: {xqd_file.name}")
-    
+
     try:
         # Load data using AFMData
         data = AFMData(str(xqd_file))
         print(f"   ✓ Data loaded: {data.get_data().shape}")
-        
-        # Create output directory for this file
-        file_output_dir = output_dir / xqd_file.stem
-        file_output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Apply corrections
         print("   🔬 Applying corrections...")
         data.first_correction().second_correction().third_correction()
@@ -230,24 +231,29 @@ def analyze_single_file_with_grain_data(
         
         num_grains = int(labels.max())
         print(f"   ✓ Segmentation completed: {num_grains} grains detected")
-        
+
         # Calculate statistics
         print("   📊 Calculating grain statistics...")
         grain_stats = calculate_grain_statistics(labels, height_corrected, meta)
         individual_grain_data = get_individual_grains(labels, height_corrected, meta)
-        
-        # Create PDF
-        print("   📄 Creating PDF plot...")
-        grain_mask = labels > 0
-        boundaries = find_boundaries(labels, mode="outer") if num_grains > 0 else np.zeros_like(labels, dtype=bool)
-        
-        pdf_path = _create_grain_analysis_pdf(
-            height_raw, height_corrected, grain_mask, labels, boundaries,
-            xqd_file.stem, file_output_dir, extent, num_grains, method
-        )
-        
+
+        # Create PDF (optional)
+        pdf_path = None
+        if save_pdf:
+            print("   📄 Creating PDF plot...")
+            grain_mask = labels > 0
+            boundaries = find_boundaries(labels, mode="outer") if num_grains > 0 else np.zeros_like(labels, dtype=bool)
+
+            file_output_dir = output_dir / xqd_file.stem
+            file_output_dir.mkdir(parents=True, exist_ok=True)
+
+            pdf_path = str(_create_grain_analysis_pdf(
+                height_raw, height_corrected, grain_mask, labels, boundaries,
+                xqd_file.stem, file_output_dir, extent, num_grains, method
+            ))
+
         print(f"   ✅ Analysis completed for {xqd_file.name}")
-        return True, individual_grain_data, grain_stats, str(pdf_path)
+        return True, individual_grain_data, grain_stats, pdf_path
         
     except Exception as e:
         print(f"   ❌ Error processing {xqd_file.name}: {e}")
