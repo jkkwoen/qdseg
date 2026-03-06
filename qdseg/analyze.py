@@ -101,9 +101,9 @@ def analyze_grains(
             f"'stardist', 'cellpose', 'cellulus'"
         )
 
-    # Calculate statistics
-    stats = calculate_grain_statistics(labels, height, meta)
+    # Calculate statistics (get_individual_grains once, reuse in calculate_grain_statistics)
     grains = get_individual_grains(labels, height, meta)
+    stats = calculate_grain_statistics(labels, height, meta, _precomputed_grains=grains)
 
     return {
         "labels": labels,
@@ -281,18 +281,18 @@ def _create_grain_analysis_pdf(
     fig, axes = plt.subplots(1, 2, figsize=(16, 8))
     
     # Left: Original height data
-    im1 = axes[0].imshow(height_raw, cmap='gray', origin='lower', extent=extent, 
-                         vmin=np.percentile(height_raw, 2), 
-                         vmax=np.percentile(height_raw, 98))
+    vmin_raw, vmax_raw = np.percentile(height_raw, [2, 98])
+    im1 = axes[0].imshow(height_raw, cmap='gray', origin='lower', extent=extent,
+                         vmin=vmin_raw, vmax=vmax_raw)
     axes[0].set_xlabel('X [nm]')
     axes[0].set_ylabel('Y [nm]')
     axes[0].set_title('Original Height Data')
     plt.colorbar(im1, ax=axes[0], label='Height [nm]')
     
     # Right: Grain mask overlay
+    vmin_corr, vmax_corr = np.percentile(height_corrected, [2, 98])
     im2 = axes[1].imshow(height_corrected, cmap='gray', origin='lower', extent=extent,
-                         vmin=np.percentile(height_corrected, 2),
-                         vmax=np.percentile(height_corrected, 98))
+                         vmin=vmin_corr, vmax=vmax_corr)
     
     # Overlay grain labels with colormap
     if grain_labels.max() > 0:
