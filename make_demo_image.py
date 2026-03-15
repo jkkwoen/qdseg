@@ -1,41 +1,38 @@
 """
 Generate docs/demo.png — 6-panel segmentation comparison for the README.
 
-Panels  : Original | Rule-based ×3 | ML ×2
-Layout  : 2 rows × 3 cols
-Sources : b2823_x-2_y-2_1um.xqd  +  *_convex.pdf (5 files)
+All segmentation is computed fresh via qdseg (no pre-rendered PDFs).
+
+Panels:
+  [0] Original (corrected height map)
+  [1] Rule-based model (Thresholding)
+  [2] Rule-based model (Watershed)
+  [3] Rule-based model (Advanced)
+  [4] Machine learning model (StarDist)
+  [5] Machine learning model (Cellpose)
 """
 
-import subprocess, tempfile, shutil
 from pathlib import Path
-
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+from matplotlib.colors import Normalize
+from skimage.segmentation import find_boundaries
 
-from qdseg import AFMData
+from qdseg import (
+    AFMData,
+    segment_thresholding,
+    segment_watershed,
+    segment_rule_based,
+    calculate_grain_statistics,
+)
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── 0. Load & correct XQD ────────────────────────────────────────────────────
 
 XQD = Path("/Users/jkkwoen/data_raw/afm_nanonavi/2017/20170209/b2823_x-2_y-2_1um.xqd")
 
-PDF_BASE = Path(
-    "/Users/jkkwoen/1_work/14_code/141_script/"
-    "afm_pl_relation/output/afm_export"
-)
-
-PDF_PANELS = [
-    ("Rule-based model\n(Thresholding)",   PDF_BASE / "b2823_x-2_y-2_1um_thresholding_convex.pdf"),
-    ("Rule-based model\n(Watershed)",      PDF_BASE / "b2823_x-2_y-2_1um_watershed_convex.pdf"),
-    ("Rule-based model\n(Advanced)",       PDF_BASE / "b2823_x-2_y-2_1um_classical_convex.pdf"),
-    ("Machine learning model\n(StarDist)", PDF_BASE / "b2823_x-2_y-2_1um_stardist_convex.pdf"),
-    ("Machine learning model\n(Cellpose)", PDF_BASE / "b2823_x-2_y-2_1um_cellpose_convex.pdf"),
-]
-
-# ── 1. Original AFM image (corrected, no segmentation) ───────────────────────
-
+print("Loading XQD …")
 data = AFMData(str(XQD))
 data.first_correction().second_correction().third_correction()
 data.align_rows(method='median')
@@ -48,48 +45,98 @@ px_nm  = meta.get("pixel_nm", (1.0, 1.0))[0]
 scan   = height.shape[1] * px_nm
 extent = [0, scan, 0, scan]
 
-# ── 2. PDF → PNG (crop internal title) ───────────────────────────────────────
+# ── 1. Segmentation ───────────────────────────────────────────────────────────
 
-def pdf_to_img(pdf_path: Path, dpi: int = 180, crop_frac: float = 0.085) -> np.ndarray:
-    tmp = Path(tempfile.mkdtemp())
-    try:
-        subprocess.run(
-            ["pdftoppm", "-r", str(dpi), "-png", "-singlefile",
-             str(pdf_path), str(tmp / "out")],
-            check=True, capture_output=True,
-        )
-        img = mpimg.imread(str(tmp / "out.png"))
-        h = img.shape[0]
-        return img[int(h * crop_frac):, :]
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+print("Segmenting: thresholding …")
+labels_thresh = segment_thresholding(height, meta)
 
-print("Converting PDFs …")
-pdf_images = [(lbl, pdf_to_img(pdf)) for lbl, pdf in PDF_PANELS]
+print("Segmenting: watershed …")
+labels_ws = segment_watershed(height, meta)
 
-# ── 3. Figure: 2 rows × 3 cols ───────────────────────────────────────────────
+print("Segmenting: rule_based (advanced) …")
+labels_rb = segment_rule_based(height, meta)
 
-fig, axes = plt.subplots(2, 3, figsize=(15, 10.5), facecolor="white",
-                         gridspec_kw={"hspace": 0.10, "wspace": 0.04})
-fig.patch.set_facecolor("white")
+print("Segmenting: StarDist …")
+from qdseg.utils import setup_gpu_environment
+setup_gpu_environment()
+from stardist.models import StarDist2D
+from csbdeep.utils import normalize as sd_normalize
+sd_model = StarDist2D.from_pretrained("2D_versatile_fluo")
+img_norm = sd_normalize(height, 1, 99.8)
+labels_sd, _ = sd_model.predict_instances(img_norm, prob_thresh=0.5, nms_thresh=0.4)
+labels_sd = labels_sd.astype(np.int32)
 
-# Panel 0 — Original
-ax0 = axes.flat[0]
+print("Segmenting: Cellpose …")
+from qdseg.utils import get_torch_device
+from cellpose import models as cp_models
+device = get_torch_device(verbose=False)
+cp_model = cp_models.CellposeModel(
+    model_type="cyto3", gpu=device.type != "cpu", device=device
+)
+pmin, pmax = np.percentile(height, [1, 99.8])
+img_cp = np.clip((height - pmin) / (pmax - pmin + 1e-10), 0, 1) * 255
+result = cp_model.eval(img_cp.astype(np.float32), diameter=None,
+                       flow_threshold=0.4, cellprob_threshold=0.0)
+labels_cp = result[0].astype(np.int32)
+
+# ── 2. Solidity helper (green=convex, red=non-convex) ─────────────────────────
+
+from skimage.measure import regionprops
+
+def solidity_boundary_rgba(labels: np.ndarray,
+                            convex_color=(0.18, 0.80, 0.18),
+                            nonconvex_color=(0.90, 0.15, 0.15),
+                            alpha: float = 0.9) -> np.ndarray:
+    """Return RGBA overlay where grain boundaries are coloured by solidity."""
+    rgba = np.zeros((*labels.shape, 4), dtype=np.float32)
+    props = regionprops(labels)
+    solidity = {p.label: p.solidity for p in props}
+    bounds = find_boundaries(labels, mode="outer")
+    by, bx = np.where(bounds)
+    for y, x in zip(by, bx):
+        lbl = labels[y, x]
+        if lbl == 0:
+            # pick a neighbouring label
+            for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
+                ny, nx = y+dy, x+dx
+                if 0 <= ny < labels.shape[0] and 0 <= nx < labels.shape[1]:
+                    if labels[ny, nx] > 0:
+                        lbl = labels[ny, nx]
+                        break
+        sol = solidity.get(lbl, 1.0)
+        color = convex_color if sol >= 0.9 else nonconvex_color
+        rgba[y, x, :3] = color
+        rgba[y, x,  3] = alpha
+    return rgba
+
+# ── 3. Figure ─────────────────────────────────────────────────────────────────
+
+PANELS = [
+    ("Original",                          None),
+    ("Rule-based model\n(Thresholding)",   labels_thresh),
+    ("Rule-based model\n(Watershed)",      labels_ws),
+    ("Rule-based model\n(Advanced)",       labels_rb),
+    ("Machine learning model\n(StarDist)", labels_sd),
+    ("Machine learning model\n(Cellpose)", labels_cp),
+]
+
 vmin, vmax = np.percentile(height, [1, 99])
-ax0.imshow(height, cmap="gray", origin="lower", extent=extent,
-           vmin=vmin, vmax=vmax, interpolation="bilinear")
-ax0.set_title("Original", fontsize=12, fontweight="bold", pad=6)
-ax0.set_xlabel("x (nm)", fontsize=8)
-ax0.set_ylabel("y (nm)", fontsize=8)
-ax0.tick_params(labelsize=7)
+norm = Normalize(vmin=vmin, vmax=vmax)
 
-# Panels 1–5 — segmentation results
-for ax, (label, img) in zip(list(axes.flat)[1:], pdf_images):
-    ax.imshow(img)
-    ax.set_title(label, fontsize=11, fontweight="bold", pad=5, linespacing=1.3)
-    ax.axis("off")
+fig, axes = plt.subplots(2, 3, figsize=(15, 11.0), facecolor="white",
+                         gridspec_kw={"hspace": 0.28, "wspace": 0.12})
 
-# Legend (bottom of figure)
+for ax, (title, labels) in zip(axes.flat, PANELS):
+    ax.imshow(height, cmap="gray", origin="lower", extent=extent,
+              norm=norm, interpolation="bilinear")
+    if labels is not None:
+        overlay = solidity_boundary_rgba(labels)
+        ax.imshow(overlay, origin="lower", extent=extent, interpolation="none")
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=5, linespacing=1.3)
+    ax.set_xlabel("x (nm)", fontsize=8)
+    ax.set_ylabel("y (nm)", fontsize=8)
+    ax.tick_params(labelsize=7)
+
 fig.text(
     0.5, 0.005,
     "  green = convex grain     red = non-convex grain     sample: b2823  |  1 × 1 µm  ",
@@ -100,4 +147,4 @@ fig.text(
 out = Path("docs/demo.png")
 out.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
-print(f"Saved → {out}")
+print(f"\nSaved → {out}")
