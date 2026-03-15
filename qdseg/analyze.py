@@ -71,14 +71,7 @@ def analyze_grains(
     >>> # With StarDist
     >>> result = analyze_grains(height, meta, method="stardist", prob_thresh=0.6)
     """
-    # Method mapping for backward compatibility
-    method_map = {
-        'rule_based': 'advanced',
-        'classical': 'advanced',
-        'advanced_watershed': 'advanced',
-        'simple_watershed': 'watershed',
-    }
-    method = method_map.get(method.lower(), method.lower())
+    method = method.lower()
 
     # Select segmentation method
     if method == "advanced":
@@ -180,14 +173,7 @@ def analyze_single_file_with_grain_data(
         # Calculate min_area_px (for classical method)
         min_area_px = nm2_to_px_area(min_area_nm2, pixel_nm)
         
-        # Method mapping for backward compatibility
-        method_map = {
-            'rule_based': 'advanced',
-            'classical': 'advanced',
-            'advanced_watershed': 'advanced',
-            'simple_watershed': 'watershed',
-        }
-        method = method_map.get(method.lower(), method.lower())
+        method = method.lower()
 
         # Perform segmentation
         print(f"   🔬 Performing {method} grain segmentation...")
