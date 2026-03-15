@@ -86,17 +86,25 @@ from skimage.measure import regionprops
 def solidity_boundary_rgba(labels: np.ndarray,
                             convex_color=(0.18, 0.80, 0.18),
                             nonconvex_color=(0.90, 0.15, 0.15),
-                            alpha: float = 0.9) -> np.ndarray:
+                            alpha: float = 0.9,
+                            thickness: int = 2) -> np.ndarray:
     """Return RGBA overlay where grain boundaries are coloured by solidity."""
+    from skimage.morphology import dilation, disk
     rgba = np.zeros((*labels.shape, 4), dtype=np.float32)
     props = regionprops(labels)
     solidity = {p.label: p.solidity for p in props}
+
     bounds = find_boundaries(labels, mode="outer")
+
+    # Per-grain colour map on the boundary pixels
+    color_r = np.zeros(labels.shape, dtype=np.float32)
+    color_g = np.zeros(labels.shape, dtype=np.float32)
+    color_b = np.zeros(labels.shape, dtype=np.float32)
+
     by, bx = np.where(bounds)
     for y, x in zip(by, bx):
         lbl = labels[y, x]
         if lbl == 0:
-            # pick a neighbouring label
             for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
                 ny, nx = y+dy, x+dx
                 if 0 <= ny < labels.shape[0] and 0 <= nx < labels.shape[1]:
@@ -104,9 +112,22 @@ def solidity_boundary_rgba(labels: np.ndarray,
                         lbl = labels[ny, nx]
                         break
         sol = solidity.get(lbl, 1.0)
-        color = convex_color if sol >= 0.9 else nonconvex_color
-        rgba[y, x, :3] = color
-        rgba[y, x,  3] = alpha
+        c = convex_color if sol >= 0.9 else nonconvex_color
+        color_r[y, x] = c[0]
+        color_g[y, x] = c[1]
+        color_b[y, x] = c[2]
+
+    # Dilate boundary mask and colour channels together
+    selem = disk(thickness)
+    thick_bounds = dilation(bounds, selem)
+    color_r = dilation(color_r, selem)
+    color_g = dilation(color_g, selem)
+    color_b = dilation(color_b, selem)
+
+    rgba[thick_bounds, 0] = color_r[thick_bounds]
+    rgba[thick_bounds, 1] = color_g[thick_bounds]
+    rgba[thick_bounds, 2] = color_b[thick_bounds]
+    rgba[thick_bounds, 3] = alpha
     return rgba
 
 # ── 3. Figure ─────────────────────────────────────────────────────────────────
