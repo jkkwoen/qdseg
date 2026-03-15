@@ -37,11 +37,6 @@ setup(
         "cellpose": [
             "cellpose>=4.0.0",
         ],
-        "cellulus": [
-            "torch>=2.0.0",
-            "zarr>=2.16.0",
-            "tqdm>=4.65.0",
-        ],
         "training": [
             "torch>=2.0.0",
             "zarr>=2.16.0",
@@ -58,9 +53,6 @@ setup(
             "stardist>=0.8.0",
             "tensorflow>=2.10.0",
             "cellpose>=4.0.0",
-            "torch>=2.0.0",
-            "zarr>=2.16.0",
-            "tqdm>=4.65.0",
             "python-dotenv>=1.0.0",
         ],
     },

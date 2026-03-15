@@ -80,7 +80,6 @@ print(f"Mean diameter: {stats['mean_diameter_nm']:.1f} nm")
 | `thresholding` | Simple threshold + connected components | — |
 | `stardist` | Star-convex polygon DL (pre-trained `2D_versatile_fluo`) | `[stardist]` |
 | `cellpose` | Gradient-flow DL (Cellpose-SAM, v4+) | `[cellpose]` |
-| `cellulus` | Unsupervised embedding DL (requires custom training) | `[cellulus]` |
 
 **Not sure which to use?** Start with `rule_based` — it requires no extra install and works well for standard QD samples. Try `stardist` or `cellpose` if grain boundaries are ambiguous.
 
@@ -121,7 +120,7 @@ pip install "git+https://github.com/jkkwoen/qdseg.git#egg=qdseg[stardist]"
 # Cellpose
 pip install "git+https://github.com/jkkwoen/qdseg.git#egg=qdseg[cellpose]"
 
-# All backends
+# StarDist + Cellpose
 pip install "git+https://github.com/jkkwoen/qdseg.git#egg=qdseg[all]"
 ```
 

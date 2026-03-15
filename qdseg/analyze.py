@@ -20,7 +20,6 @@ from .segmentation import (
     segment_thresholding,
     segment_stardist,
     segment_cellpose,
-    segment_cellulus,
 )
 from .statistics import calculate_grain_statistics, get_individual_grains
 from skimage.segmentation import find_boundaries
@@ -49,7 +48,6 @@ def analyze_grains(
         - 'thresholding': Height threshold based
         - 'stardist': StarDist deep learning
         - 'cellpose': CellPose deep learning
-        - 'cellulus': Cellulus deep learning
     **kwargs
         Additional arguments passed to segmentation function
 
@@ -92,13 +90,11 @@ def analyze_grains(
         labels = segment_stardist(height, meta, **kwargs)
     elif method == "cellpose":
         labels = segment_cellpose(height, meta, **kwargs)
-    elif method == "cellulus":
-        labels = segment_cellulus(height, meta, **kwargs)
     else:
         raise ValueError(
             f"Unknown method: {method}. "
             f"Supported methods: 'rule_based', 'watershed', 'thresholding', "
-            f"'stardist', 'cellpose', 'cellulus'"
+            f"'stardist', 'cellpose'"
         )
 
     # Calculate statistics (get_individual_grains once, reuse in calculate_grain_statistics)
@@ -139,7 +135,6 @@ def analyze_single_file_with_grain_data(
         - 'thresholding': Height threshold based
         - 'stardist': StarDist deep learning
         - 'cellpose': CellPose deep learning
-        - 'cellulus': Cellulus deep learning
     gaussian_sigma : float
         Gaussian smoothing sigma (for rule_based and watershed methods)
     min_area_nm2 : float
@@ -220,13 +215,11 @@ def analyze_single_file_with_grain_data(
             labels = segment_stardist(height_corrected, meta, **kwargs)
         elif method == "cellpose":
             labels = segment_cellpose(height_corrected, meta, **kwargs)
-        elif method == "cellulus":
-            labels = segment_cellulus(height_corrected, meta, **kwargs)
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
                 f"Supported methods: 'rule_based', 'watershed', 'thresholding', "
-                f"'stardist', 'cellpose', 'cellulus'"
+                f"'stardist', 'cellpose'"
             )
         
         num_grains = int(labels.max())

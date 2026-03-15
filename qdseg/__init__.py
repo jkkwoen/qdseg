@@ -17,7 +17,7 @@ Module Structure:
   - segment_thresholding: Thresholding-based
   - segment_stardist: StarDist (TensorFlow)
   - segment_cellpose: CellPose (PyTorch)
-  - segment_cellulus: Cellulus (PyTorch, requires training)
+
 - statistics: Grain statistics calculation
 - analyze: High-level analysis API
 - utils: GPU utilities
@@ -53,7 +53,6 @@ from .segmentation import (
     segment_thresholding,
     segment_stardist,
     segment_cellpose,
-    segment_cellulus,
 )
 
 # Statistics functions
@@ -81,13 +80,12 @@ from .utils import (
 
 # Training utilities
 from .training import (
-    TrainingConfig,
-    CellulusTrainer,
-    load_afm_data,
-    get_device,
-    get_hardware_info,
-    print_hardware_info,
-    setup_environment,
+    StarDistConfig,
+    StarDistTrainer,
+    create_stardist_labels,
+    CellposeConfig,
+    CellposeTrainer,
+    create_cellpose_labels,
 )
 
 __version__ = "0.3.3"
@@ -99,7 +97,6 @@ __all__ = [
     "segment_thresholding",
     "segment_stardist",
     "segment_cellpose",
-    "segment_cellulus",
     # Statistics
     "calculate_grain_statistics",
     "get_individual_grains",
@@ -114,11 +111,10 @@ __all__ = [
     "check_tensorflow_gpu",
     "print_gpu_info",
     # Training
-    "TrainingConfig",
-    "CellulusTrainer",
-    "load_afm_data",
-    "get_device",
-    "get_hardware_info",
-    "print_hardware_info",
-    "setup_environment",
+    "StarDistConfig",
+    "StarDistTrainer",
+    "create_stardist_labels",
+    "CellposeConfig",
+    "CellposeTrainer",
+    "create_cellpose_labels",
 ]
