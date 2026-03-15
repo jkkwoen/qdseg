@@ -326,7 +326,7 @@ def create_labeled_data_from_rule_based(
             review_with_napari=True,
         )
     """
-    from grain_analyzer import AFMData, segment_advanced
+    from qdseg import AFMData, segment
 
     images_dir = output_dir / "images"
     masks_dir = output_dir / "masks"
@@ -350,7 +350,7 @@ def create_labeled_data_from_rule_based(
             height_uint8 = np.clip((height - pmin) / (pmax - pmin) * 255, 0, 255).astype(np.uint8)
 
             # Advanced segmentation
-            labels = segment_advanced(height, meta)
+            labels = segment(height, meta)
             
             # Save
             img_path = images_dir / f"{xqd_file.stem}.npy"

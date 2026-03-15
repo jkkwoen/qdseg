@@ -6,10 +6,10 @@ Each function follows the same input/output format:
     Output: labels (2D int array, 0=background, 1,2,3...=grains)
 
 Usage examples:
-    >>> from qdseg.segmentation import segment_advanced, segment_watershed, segment_stardist
-    >>> labels = segment_advanced(height, meta)
-    >>> labels = segment_watershed(height, meta)
-    >>> labels = segment_stardist(height, meta)
+    >>> from qdseg.segmentation import segment
+    >>> labels = segment(height, meta)                        # default: advanced
+    >>> labels = segment(height, meta, method='watershed')
+    >>> labels = segment(height, meta, method='stardist')
 """
 
 import warnings
@@ -89,7 +89,7 @@ def _is_gpu_error(exc: BaseException) -> bool:
     return any(m in msg for m in markers)
 
 
-def segment_advanced(
+def _segment_advanced(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
@@ -207,7 +207,7 @@ def segment_advanced(
     return labels
 
 
-def segment_watershed(
+def _segment_watershed(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
@@ -314,7 +314,7 @@ def segment_watershed(
     return labeled_image.astype(np.int32)
 
 
-def segment_thresholding(
+def _segment_thresholding(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
@@ -481,7 +481,7 @@ def segment_thresholding(
     return labeled_image.astype(np.int32)
 
 
-def segment_stardist(
+def _segment_stardist(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
@@ -613,7 +613,7 @@ def segment_stardist(
     return labels.astype(np.int32)
 
 
-def segment_cellpose(
+def _segment_cellpose(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
@@ -1324,3 +1324,57 @@ def _embeddings_to_labels(embeddings: np.ndarray, img: np.ndarray) -> np.ndarray
     
     return labels.astype(np.int32)
 
+
+
+# ── Public dispatcher ──────────────────────────────────────────────────────────
+
+
+def segment(
+    height: np.ndarray,
+    meta: Optional[Dict] = None,
+    *,
+    method: str = "advanced",
+    **kwargs
+) -> np.ndarray:
+    """Segment grains in an AFM height image.
+
+    Parameters
+    ----------
+    height : np.ndarray
+        Height image (2D, nm units).
+    meta : dict, optional
+        Metadata with 'pixel_nm' key.
+    method : str
+        Segmentation method.  One of:
+        - ``'advanced'``     (default) Otsu + Distance + DBSCAN + Voronoi
+        - ``'watershed'``    Watershed-based
+        - ``'thresholding'`` Height threshold based
+        - ``'stardist'``     StarDist deep learning (requires ``stardist``)
+        - ``'cellpose'``     CellPose deep learning (requires ``cellpose``)
+    **kwargs
+        Additional keyword arguments forwarded to the selected method.
+
+    Returns
+    -------
+    np.ndarray
+        Label image (int32, 0 = background, 1 … N = grain IDs).
+
+    Examples
+    --------
+    >>> from qdseg import segment
+    >>> labels = segment(height, meta)
+    >>> labels = segment(height, meta, method='watershed')
+    >>> labels = segment(height, meta, method='stardist', prob_thresh=0.6)
+    """
+    _dispatch = {
+        "advanced":     _segment_advanced,
+        "watershed":    _segment_watershed,
+        "thresholding": _segment_thresholding,
+        "stardist":     _segment_stardist,
+        "cellpose":     _segment_cellpose,
+    }
+    if method not in _dispatch:
+        raise ValueError(
+            f"Unknown method '{method}'. Choose from: {list(_dispatch)}"
+        )
+    return _dispatch[method](height, meta, **kwargs)

@@ -217,11 +217,11 @@ class TestStatistics:
 
 
 class TestSegmentAdvanced:
-    """segment_advanced on synthetic data."""
+    """segment() with method='advanced' on synthetic data."""
 
     def setup_method(self):
-        from qdseg.segmentation import segment_advanced
-        self.segment = segment_advanced
+        from qdseg.segmentation import segment
+        self.segment = lambda h, m, **kw: segment(h, m, method='advanced', **kw)
         self.height = _make_flat_image()
         self.meta = _make_meta()
 
@@ -256,7 +256,7 @@ class TestSegmentAdvanced:
 
 
 class TestAFMDataReset:
-    """AFMData.reset() should restore the raw data."""
+    """AFMData.reset() should restore the raw data and clear labels."""
 
     def test_reset_without_xqd(self):
         """Test reset logic directly without loading a file."""
@@ -269,9 +269,11 @@ class TestAFMDataReset:
                 self.height_raw = h
                 self.current_data = h.copy()
                 self._corrector = AFMCorrections()
+                self._labels = None
 
             def reset(self):
                 self.current_data = self.height_raw.copy()
+                self._labels = None
                 return self
 
             def first_correction(self):
@@ -283,6 +285,28 @@ class TestAFMDataReset:
         assert not np.allclose(obj.current_data, raw), "After correction data should differ"
         obj.reset()
         assert np.allclose(obj.current_data, raw), "After reset data should match raw"
+
+    def test_reset_clears_labels(self):
+        """reset() must clear any stored segmentation result."""
+        from qdseg.corrections import AFMCorrections
+        raw = _make_flat_image()
+
+        class MockAFM:
+            def __init__(self, h):
+                self.height_raw = h
+                self.current_data = h.copy()
+                self._labels = None
+
+            def reset(self):
+                self.current_data = self.height_raw.copy()
+                self._labels = None
+                return self
+
+        obj = MockAFM(raw)
+        obj._labels = np.zeros((64, 64), dtype=np.int32)  # simulate post-segment state
+        assert obj._labels is not None
+        obj.reset()
+        assert obj._labels is None, "reset() should clear _labels"
 
 
 # ─── analyze._filter_small_labels ────────────────────────────────────────────
@@ -366,8 +390,8 @@ class TestCellposeV4Compat:
     def test_model_type_param_removed(self):
         """segment_cellpose must NOT have a model_type parameter (v4 removed it)."""
         import inspect
-        from qdseg.segmentation import segment_cellpose
-        sig = inspect.signature(segment_cellpose)
+        from qdseg.segmentation import _segment_cellpose
+        sig = inspect.signature(_segment_cellpose)
         assert "model_type" not in sig.parameters, (
             "model_type parameter should not exist in v4-compatible segment_cellpose"
         )

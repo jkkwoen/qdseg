@@ -3,7 +3,7 @@ AFMData wrapper class for XQD files.
 """
 
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .io import load_height_nm
 from .corrections import AFMCorrections
@@ -33,6 +33,7 @@ class AFMData:
         self.height_raw, self.meta = load_height_nm(file_path)
         self.current_data = self.height_raw.copy()
         self._corrector = AFMCorrections()
+        self._labels: Optional[np.ndarray] = None
 
     # ── corrections ──────────────────────────────────────────────────────────
 
@@ -138,7 +139,62 @@ class AFMData:
             self, for method chaining.
         """
         self.current_data = self.height_raw.copy()
+        self._labels = None
         return self
+
+    # ── segmentation & analysis ──────────────────────────────────────────────
+
+    @property
+    def labels(self) -> Optional[np.ndarray]:
+        """Last segmentation result. None if segment() has not been called."""
+        return self._labels
+
+    def segment(self, method: str = "advanced", **kwargs) -> np.ndarray:
+        """Segment grains and store the result internally.
+
+        Parameters
+        ----------
+        method : str
+            One of ``'advanced'`` (default), ``'watershed'``,
+            ``'thresholding'``, ``'stardist'``, ``'cellpose'``.
+        **kwargs
+            Forwarded to the selected segmentation function.
+
+        Returns
+        -------
+        np.ndarray
+            Label image (int32, 0 = background, 1 … N = grain IDs).
+            Also stored as ``self.labels`` for later access.
+        """
+        from .segmentation import segment as _segment
+        self._labels = _segment(self.current_data, self.meta, method=method, **kwargs)
+        return self._labels
+
+    def stats(self) -> Dict:
+        """Return overall grain statistics.
+
+        Raises
+        ------
+        RuntimeError
+            If ``segment()`` has not been called yet.
+        """
+        from .statistics import calculate_grain_statistics
+        if self._labels is None:
+            raise RuntimeError("Call segment() before stats().")
+        return calculate_grain_statistics(self._labels, self.current_data, self.meta)
+
+    def grains(self) -> List[Dict]:
+        """Return per-grain measurements as a list of dicts.
+
+        Raises
+        ------
+        RuntimeError
+            If ``segment()`` has not been called yet.
+        """
+        from .statistics import get_individual_grains
+        if self._labels is None:
+            raise RuntimeError("Call segment() before grains().")
+        return get_individual_grains(self._labels, self.current_data, self.meta)
 
     # ── accessors ────────────────────────────────────────────────────────────
 

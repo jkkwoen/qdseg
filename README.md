@@ -23,64 +23,48 @@ pip install git+https://github.com/jkkwoen/qdseg.git
 
 ## Quick start
 
-### Option A — High-level (recommended)
+```python
+from qdseg import AFMData
 
-The simplest way to process a single file:
+data = AFMData("sample.xqd")
+data.first_correction().second_correction().third_correction()
+data.flat_correction("line_by_line").baseline_correction("min_to_zero")
+
+data.segment()                     # default: method='advanced'
+stats = data.stats()
+
+print(f"QDs detected : {stats['num_grains']}")
+print(f"Mean height  : {stats['mean_height_nm']:.1f} nm")
+```
+
+Labels are stored internally and also returned:
+
+```python
+labels = data.segment()            # returns np.ndarray and stores as data.labels
+grains = data.grains()             # list of per-grain dicts
+```
+
+To save results:
 
 ```python
 from pathlib import Path
-from qdseg import analyze_single_file_with_grain_data
+from qdseg import save_results
 
-success, grains, stats, data_dir = analyze_single_file_with_grain_data(
-    xqd_file=Path("sample.xqd"),
-    output_dir=Path("output"),
-    method="advanced",   # no extra install required
-)
-
-print(f"QDs detected : {stats['num_grains']}")
-print(f"Mean height  : {stats['mean_height_nm']:.1f} nm")
-print(f"Data saved   : {data_dir}")
+save_results(stats, grains,
+             stats_path=Path("output/sample_stats.json"),
+             grains_path=Path("output/sample_grains.csv"))
 ```
 
-This handles loading, all corrections, segmentation, statistics, and data export in one call.
-Results are saved to `output/sample/` by default:
-- `sample_stats.json` — overall statistics
-- `sample_grains.csv` — per-grain measurements (one row per grain)
-
-To save files to custom paths, use `stats_path` / `grains_path`:
+For custom pipelines that work directly with height/meta arrays:
 
 ```python
-success, grains, stats, data_dir = analyze_single_file_with_grain_data(
-    xqd_file=Path("sample.xqd"),
-    output_dir=Path("output"),
-    method="advanced",
-    stats_path=Path("results/my_stats.json"),
-    grains_path=Path("results/my_grains.csv"),
-)
-```
+from qdseg import segment, calculate_grain_statistics
 
-### Option B — Step-by-step (for custom pipelines)
+labels = segment(height, meta)                        # default: advanced
+labels = segment(height, meta, method='watershed')
+labels = segment(height, meta, method='stardist', prob_thresh=0.6)
 
-```python
-from qdseg import AFMData, segment_advanced, calculate_grain_statistics
-
-# 1. Load
-data = AFMData("sample.xqd")
-
-# 2. Correct AFM artefacts (see "AFM corrections" section for details)
-data.first_correction().second_correction().third_correction()
-data.flat_correction("line_by_line")
-data.baseline_correction("min_to_zero")
-
-# 3. Segment
-height = data.get_data()
-meta   = data.get_meta()
-labels = segment_advanced(height, meta)
-
-# 4. Statistics
 stats = calculate_grain_statistics(labels, height, meta)
-print(f"QDs detected : {stats['num_grains']}")
-print(f"Mean height  : {stats['mean_height_nm']:.1f} nm")
 ```
 
 ---

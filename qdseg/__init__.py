@@ -9,17 +9,14 @@ Key Features:
 - Reusable general-purpose package
 
 Module Structure:
-- AFMData: XQD file loading and data access
-- corrections: Data corrections (flat, baseline, etc.)
-- segmentation: Segmentation algorithms
-  - segment_advanced: Otsu + Distance + DBSCAN + Voronoi (recommended)
-  - segment_watershed: Watershed-based
-  - segment_thresholding: Thresholding-based
-  - segment_stardist: StarDist (TensorFlow)
-  - segment_cellpose: CellPose (PyTorch)
-
+- AFMData: XQD file loading, corrections, segmentation, and statistics
+  - .segment()  — run segmentation (stores result internally, returns labels)
+  - .stats()    — overall grain statistics dict
+  - .grains()   — per-grain measurement list
+  - .labels     — property: last segmentation result
+- segmentation: segment() dispatcher + internal method functions
 - statistics: Grain statistics calculation
-- analyze: High-level analysis API
+- analyze: save_results(), _filter_small_labels(), _create_grain_analysis_pdf()
 - utils: GPU utilities
 
 GPU Acceleration (auto-detected based on environment):
@@ -28,32 +25,24 @@ GPU Acceleration (auto-detected based on environment):
 - Other: CPU
 
 Usage Example:
-    >>> from qdseg import AFMData, segment_advanced, calculate_grain_statistics
+    >>> from qdseg import AFMData
     >>>
-    >>> # 1. Load data
     >>> data = AFMData("path/to/file.xqd")
-    >>>
-    >>> # 2. Apply corrections
     >>> data.first_correction().second_correction().third_correction()
-    >>> data.align_rows(method='median')  # Scan line artefact correction (before flat)
     >>> data.flat_correction("line_by_line").baseline_correction("min_to_zero")
     >>>
-    >>> # 3. Segmentation
-    >>> labels = segment_advanced(data.get_data(), data.get_meta())
-    >>>
-    >>> # 4. Calculate statistics
-    >>> stats = calculate_grain_statistics(labels, data.get_data(), data.get_meta())
+    >>> data.segment()                     # default: method='advanced'
+    >>> stats = data.stats()
     >>> print(f"Found {stats['num_grains']} quantum dots")
+    >>>
+    >>> # Direct height/meta access (custom pipelines)
+    >>> from qdseg import segment, calculate_grain_statistics
+    >>> labels = segment(height, meta, method='watershed')
+    >>> stats = calculate_grain_statistics(labels, height, meta)
 """
 
-# Segmentation functions
-from .segmentation import (
-    segment_advanced,
-    segment_watershed,
-    segment_thresholding,
-    segment_stardist,
-    segment_cellpose,
-)
+# Unified segmentation dispatcher
+from .segmentation import segment
 
 # Statistics functions
 from .statistics import (
@@ -61,11 +50,8 @@ from .statistics import (
     get_individual_grains,
 )
 
-# High-level analysis
-from .analyze import (
-    analyze_grains,
-    analyze_single_file_with_grain_data,
-)
+# save_results
+from .analyze import save_results
 
 # Data wrapper
 from .afm_data_wrapper import AFMData
@@ -91,20 +77,15 @@ from .training import (
 __version__ = "0.3.3"
 
 __all__ = [
-    # Segmentation
-    "segment_advanced",
-    "segment_watershed",
-    "segment_thresholding",
-    "segment_stardist",
-    "segment_cellpose",
+    # Data wrapper (primary API)
+    "AFMData",
+    # Segmentation dispatcher (for custom pipelines)
+    "segment",
     # Statistics
     "calculate_grain_statistics",
     "get_individual_grains",
-    # Analysis
-    "analyze_grains",
-    "analyze_single_file_with_grain_data",
-    # Data
-    "AFMData",
+    # Results I/O
+    "save_results",
     # GPU utilities
     "setup_gpu_environment",
     "get_torch_device",
