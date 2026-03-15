@@ -115,19 +115,19 @@ pip install git+https://github.com/jkkwoen/qdseg.git
 
 ```bash
 # StarDist (TensorFlow)
-pip install "git+https://github.com/jkkwoen/qdseg.git#egg=qdseg[stardist]"
+pip install "qdseg[stardist] @ git+https://github.com/jkkwoen/qdseg.git"
 
 # Cellpose
-pip install "git+https://github.com/jkkwoen/qdseg.git#egg=qdseg[cellpose]"
+pip install "qdseg[cellpose] @ git+https://github.com/jkkwoen/qdseg.git"
 
 # StarDist + Cellpose
-pip install "git+https://github.com/jkkwoen/qdseg.git#egg=qdseg[all]"
+pip install "qdseg[all] @ git+https://github.com/jkkwoen/qdseg.git"
 ```
 
 ### Apple Silicon (Mac M-series)
 
 ```bash
-pip install "git+https://github.com/jkkwoen/qdseg.git#egg=qdseg[mac-gpu]"
+pip install "qdseg[mac-gpu] @ git+https://github.com/jkkwoen/qdseg.git"
 ```
 
 Enables Metal (TensorFlow) and MPS (PyTorch) acceleration automatically.
