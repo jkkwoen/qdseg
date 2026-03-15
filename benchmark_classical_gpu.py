@@ -2,7 +2,7 @@
 """
 Classical Segmentation CPU vs GPU Benchmark.
 
-Measures per-file processing time for rule_based, watershed, and thresholding
+Measures per-file processing time for advanced, watershed, and thresholding
 with use_gpu=False (CPU) and use_gpu=True (GPU via cuCIM+CuPy), across two
 image sizes and several batch sizes.
 
@@ -185,10 +185,10 @@ def main():
     else:
         print(f"  GPU:     not available — CPU-only results")
 
-    from qdseg.segmentation import segment_rule_based, segment_watershed, segment_thresholding
+    from qdseg.segmentation import segment_advanced, segment_watershed, segment_thresholding
 
     methods = [
-        ("rule_based",   segment_rule_based,   "Rule-based  (Otsu+DT+DBSCAN+Voronoi)"),
+        ("advanced",     segment_advanced,     "Advanced    (Otsu+DT+DBSCAN+Voronoi)"),
         ("watershed",    segment_watershed,    "Watershed   (Gaussian+Sobel+WS)"),
         ("thresholding", segment_thresholding, "Thresholding (Otsu)"),
     ]

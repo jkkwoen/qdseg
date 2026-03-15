@@ -141,8 +141,8 @@ def _bench_seg(fn, preloaded: list, warmup: bool = False) -> dict:
 
 
 def bench_classical(preloaded: list) -> dict:
-    from qdseg.segmentation import segment_rule_based
-    fn = lambda h, m: segment_rule_based(h, m, use_gpu=None)
+    from qdseg.segmentation import segment_advanced
+    fn = lambda h, m: segment_advanced(h, m, use_gpu=None)
     return _bench_seg(fn, preloaded, warmup=False)
 
 
@@ -178,7 +178,7 @@ def print_results(results: dict, n_files: int):
     methods = ["corrections", "classical", "stardist", "cellpose"]
     labels = {
         "corrections": "Corrections (1st+flat+base)",
-        "classical":   "Classical  (rule_based)    ",
+        "classical":   "Classical  (advanced)      ",
         "stardist":    "StarDist                   ",
         "cellpose":    "CellPose                   ",
     }
@@ -262,7 +262,7 @@ def main():
     results["corrections"] = bench_corrections(good_files)
 
     # ── Classical ────────────────────────────────────────────────────────────
-    print("  Benchmarking classical (rule_based) ...")
+    print("  Benchmarking classical (advanced) ...")
     try:
         results["classical"] = bench_classical(preloaded)
     except Exception as e:

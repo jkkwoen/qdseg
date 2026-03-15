@@ -216,12 +216,12 @@ class TestStatistics:
 # ─── segmentation ────────────────────────────────────────────────────────────
 
 
-class TestSegmentRuleBased:
-    """segment_rule_based on synthetic data."""
+class TestSegmentAdvanced:
+    """segment_advanced on synthetic data."""
 
     def setup_method(self):
-        from qdseg.segmentation import segment_rule_based
-        self.segment = segment_rule_based
+        from qdseg.segmentation import segment_advanced
+        self.segment = segment_advanced
         self.height = _make_flat_image()
         self.meta = _make_meta()
 

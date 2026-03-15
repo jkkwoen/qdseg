@@ -12,7 +12,7 @@ Migration Guide:
     from grain_analyzer.grain_analysis import calculate_grain_statistics
 
     # New code:
-    from grain_analyzer.segmentation import segment_rule_based
+    from grain_analyzer.segmentation import segment_advanced
     from grain_analyzer.statistics import calculate_grain_statistics
 """
 
@@ -28,14 +28,14 @@ class AFMGrainAnalyzer:
     AFM grain analysis class (Deprecated)
 
     For new code, use the function-based API:
-        - segment_rule_based(), segment_stardist()
+        - segment_advanced(), segment_stardist()
         - calculate_grain_statistics()
     """
     
     def __init__(self):
         warnings.warn(
             "AFMGrainAnalyzer is deprecated. "
-            "Use segment_rule_based() and calculate_grain_statistics() instead.",
+            "Use segment_advanced() and calculate_grain_statistics() instead.",
             DeprecationWarning,
             stacklevel=2
         )
@@ -86,7 +86,7 @@ def segment_by_marker_growth(
     """
     Voronoi segmentation centered on markers.
 
-    For new code, use segment_rule_based() instead.
+    For new code, use segment_advanced() instead.
     This function is maintained for internal use and backward compatibility.
 
     Parameters

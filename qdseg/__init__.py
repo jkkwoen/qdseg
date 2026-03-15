@@ -12,7 +12,7 @@ Module Structure:
 - AFMData: XQD file loading and data access
 - corrections: Data corrections (flat, baseline, etc.)
 - segmentation: Segmentation algorithms
-  - segment_rule_based: Otsu + Distance + DBSCAN + Voronoi (recommended)
+  - segment_advanced: Otsu + Distance + DBSCAN + Voronoi (recommended)
   - segment_watershed: Watershed-based
   - segment_thresholding: Thresholding-based
   - segment_stardist: StarDist (TensorFlow)
@@ -28,7 +28,7 @@ GPU Acceleration (auto-detected based on environment):
 - Other: CPU
 
 Usage Example:
-    >>> from qdseg import AFMData, segment_rule_based, calculate_grain_statistics
+    >>> from qdseg import AFMData, segment_advanced, calculate_grain_statistics
     >>>
     >>> # 1. Load data
     >>> data = AFMData("path/to/file.xqd")
@@ -39,7 +39,7 @@ Usage Example:
     >>> data.flat_correction("line_by_line").baseline_correction("min_to_zero")
     >>>
     >>> # 3. Segmentation
-    >>> labels = segment_rule_based(data.get_data(), data.get_meta())
+    >>> labels = segment_advanced(data.get_data(), data.get_meta())
     >>>
     >>> # 4. Calculate statistics
     >>> stats = calculate_grain_statistics(labels, data.get_data(), data.get_meta())
@@ -48,7 +48,7 @@ Usage Example:
 
 # Segmentation functions
 from .segmentation import (
-    segment_rule_based,
+    segment_advanced,
     segment_watershed,
     segment_thresholding,
     segment_stardist,
@@ -92,7 +92,7 @@ __version__ = "0.3.3"
 
 __all__ = [
     # Segmentation
-    "segment_rule_based",
+    "segment_advanced",
     "segment_watershed",
     "segment_thresholding",
     "segment_stardist",

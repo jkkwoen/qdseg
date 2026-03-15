@@ -7,7 +7,7 @@
 
 Load an XQD file, correct artefacts, detect quantum dots, and get per-grain statistics — in a few lines of Python.
 
-![QDSeg demo — AFM height map and rule_based segmentation result](docs/demo.png)
+![QDSeg demo — AFM height map and advanced segmentation result](docs/demo.png)
 
 ---
 
@@ -34,7 +34,7 @@ from qdseg import analyze_single_file_with_grain_data
 success, grains, stats, pdf_path = analyze_single_file_with_grain_data(
     xqd_file=Path("sample.xqd"),
     output_dir=Path("output"),
-    method="rule_based",   # no extra install required
+    method="advanced",   # no extra install required
 )
 
 print(f"QDs detected : {stats['num_grains']}")
@@ -47,7 +47,7 @@ This handles loading, all corrections, segmentation, statistics, and PDF export 
 ### Option B — Step-by-step (for custom pipelines)
 
 ```python
-from qdseg import AFMData, segment_rule_based, calculate_grain_statistics
+from qdseg import AFMData, segment_advanced, calculate_grain_statistics
 
 # 1. Load
 data = AFMData("sample.xqd")
@@ -61,7 +61,7 @@ data.baseline_correction("min_to_zero")
 # 3. Segment
 height = data.get_data()
 meta   = data.get_meta()
-labels = segment_rule_based(height, meta)
+labels = segment_advanced(height, meta)
 
 # 4. Statistics
 stats = calculate_grain_statistics(labels, height, meta)
@@ -75,13 +75,13 @@ print(f"Mean diameter: {stats['mean_diameter_nm']:.1f} nm")
 
 | Method | Description | Extra install |
 |--------|-------------|:-------------:|
-| `rule_based` | Otsu threshold → distance transform → DBSCAN peaks → Voronoi | — |
-| `watershed` | Local maxima → watershed on Sobel gradient | — |
+| `advanced` | Otsu threshold → distance transform → DBSCAN peaks → Voronoi | — |
 | `thresholding` | Simple threshold + connected components | — |
+| `watershed` | Local maxima → watershed on Sobel gradient | — |
 | `stardist` | Star-convex polygon DL (pre-trained `2D_versatile_fluo`) | `[stardist]` |
 | `cellpose` | Gradient-flow DL (Cellpose-SAM, v4+) | `[cellpose]` |
 
-**Not sure which to use?** Start with `rule_based` — it requires no extra install and works well for standard QD samples. Try `stardist` or `cellpose` if grain boundaries are ambiguous.
+**Not sure which to use?** Start with `advanced` — it requires no extra install and works well for standard QD samples. Try `stardist` or `cellpose` if grain boundaries are ambiguous.
 
 ---
 

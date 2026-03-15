@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 from .afm_data_wrapper import AFMData
 from .segmentation import (
-    segment_rule_based,
+    segment_advanced,
     segment_watershed,
     segment_thresholding,
     segment_stardist,
@@ -29,7 +29,7 @@ def analyze_grains(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
-    method: str = "rule_based",
+    method: str = "advanced",
     **kwargs
 ) -> Dict[str, Any]:
     """
@@ -42,8 +42,8 @@ def analyze_grains(
     meta : dict, optional
         Metadata with 'pixel_nm' key
     method : str
-        Segmentation method (default: 'rule_based')
-        - 'rule_based': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
+        Segmentation method (default: 'advanced')
+        - 'advanced': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
         - 'watershed': Watershed segmentation
         - 'thresholding': Height threshold based
         - 'stardist': StarDist deep learning
@@ -62,7 +62,7 @@ def analyze_grains(
 
     Examples
     --------
-    >>> result = analyze_grains(height, meta, method="rule_based")
+    >>> result = analyze_grains(height, meta, method="advanced")
     >>> print(f"Found {result['stats']['num_grains']} grains")
 
     >>> # With watershed
@@ -73,15 +73,16 @@ def analyze_grains(
     """
     # Method mapping for backward compatibility
     method_map = {
-        'classical': 'rule_based',
-        'advanced_watershed': 'rule_based',
+        'rule_based': 'advanced',
+        'classical': 'advanced',
+        'advanced_watershed': 'advanced',
         'simple_watershed': 'watershed',
     }
     method = method_map.get(method.lower(), method.lower())
 
     # Select segmentation method
-    if method == "rule_based":
-        labels = segment_rule_based(height, meta, **kwargs)
+    if method == "advanced":
+        labels = segment_advanced(height, meta, **kwargs)
     elif method == "watershed":
         labels = segment_watershed(height, meta, **kwargs)
     elif method == "thresholding":
@@ -93,7 +94,7 @@ def analyze_grains(
     else:
         raise ValueError(
             f"Unknown method: {method}. "
-            f"Supported methods: 'rule_based', 'watershed', 'thresholding', "
+            f"Supported methods: 'advanced', 'watershed', 'thresholding', "
             f"'stardist', 'cellpose'"
         )
 
@@ -112,7 +113,7 @@ def analyze_grains(
 def analyze_single_file_with_grain_data(
     xqd_file: Path,
     output_dir: Path,
-    method: str = "rule_based",
+    method: str = "advanced",
     gaussian_sigma: float = 1.0,
     min_area_nm2: float = 78.5,
     min_peak_separation_nm: float = 10.0,
@@ -129,18 +130,18 @@ def analyze_single_file_with_grain_data(
     output_dir : Path
         Output directory for PDF file (only used when save_pdf=True)
     method : str
-        Segmentation method (default: 'rule_based')
-        - 'rule_based': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
+        Segmentation method (default: 'advanced')
+        - 'advanced': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
         - 'watershed': Watershed segmentation
         - 'thresholding': Height threshold based
         - 'stardist': StarDist deep learning
         - 'cellpose': CellPose deep learning
     gaussian_sigma : float
-        Gaussian smoothing sigma (for rule_based and watershed methods)
+        Gaussian smoothing sigma (for advanced and watershed methods)
     min_area_nm2 : float
         Minimum grain area in nm²
     min_peak_separation_nm : float
-        Minimum peak separation in nm (for rule_based method)
+        Minimum peak separation in nm (for advanced method)
     save_pdf : bool
         Whether to generate and save a PDF report (default: True).
         Set to False to skip PDF generation and improve performance.
@@ -181,8 +182,9 @@ def analyze_single_file_with_grain_data(
         
         # Method mapping for backward compatibility
         method_map = {
-            'classical': 'rule_based',
-            'advanced_watershed': 'rule_based',
+            'rule_based': 'advanced',
+            'classical': 'advanced',
+            'advanced_watershed': 'advanced',
             'simple_watershed': 'watershed',
         }
         method = method_map.get(method.lower(), method.lower())
@@ -190,8 +192,8 @@ def analyze_single_file_with_grain_data(
         # Perform segmentation
         print(f"   🔬 Performing {method} grain segmentation...")
 
-        if method == "rule_based":
-            labels = segment_rule_based(
+        if method == "advanced":
+            labels = segment_advanced(
                 height_corrected,
                 meta,
                 gaussian_sigma=gaussian_sigma,
@@ -218,7 +220,7 @@ def analyze_single_file_with_grain_data(
         else:
             raise ValueError(
                 f"Unknown method: {method}. "
-                f"Supported methods: 'rule_based', 'watershed', 'thresholding', "
+                f"Supported methods: 'advanced', 'watershed', 'thresholding', "
                 f"'stardist', 'cellpose'"
             )
         

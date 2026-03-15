@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Classical Segmentation Benchmark: rule_based, watershed, thresholding.
+Classical Segmentation Benchmark: advanced, watershed, thresholding.
 
 Classical methods have no model-loading overhead (pure CPU scipy/skimage),
 so this focuses on per-image processing time and N-file batch scaling.
@@ -107,7 +107,7 @@ def main():
     print(f"  Size:   {hw}x{hw}  |  N = {file_counts}")
     print(f"  Note:   No GPU used. No model-load overhead.")
 
-    from qdseg.segmentation import segment_rule_based, segment_watershed, segment_thresholding
+    from qdseg.segmentation import segment_advanced, segment_watershed, segment_thresholding
 
     images = _make_images(hw, max(file_counts))
 
@@ -117,7 +117,7 @@ def main():
     }
 
     methods = [
-        ("rule_based",    segment_rule_based,    f"Rule-based (Otsu+DT+DBSCAN+Voronoi)  — {hw}x{hw}"),
+        ("advanced",      segment_advanced,      f"Advanced (Otsu+DT+DBSCAN+Voronoi)    — {hw}x{hw}"),
         ("watershed",     segment_watershed,     f"Watershed                              — {hw}x{hw}"),
         ("thresholding",  segment_thresholding,  f"Thresholding (Otsu)                    — {hw}x{hw}"),
     ]

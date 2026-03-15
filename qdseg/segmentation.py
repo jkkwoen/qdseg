@@ -6,8 +6,8 @@ Each function follows the same input/output format:
     Output: labels (2D int array, 0=background, 1,2,3...=grains)
 
 Usage examples:
-    >>> from qdseg.segmentation import segment_rule_based, segment_watershed, segment_stardist
-    >>> labels = segment_rule_based(height, meta)
+    >>> from qdseg.segmentation import segment_advanced, segment_watershed, segment_stardist
+    >>> labels = segment_advanced(height, meta)
     >>> labels = segment_watershed(height, meta)
     >>> labels = segment_stardist(height, meta)
 """
@@ -89,7 +89,7 @@ def _is_gpu_error(exc: BaseException) -> bool:
     return any(m in msg for m in markers)
 
 
-def segment_rule_based(
+def segment_advanced(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
@@ -99,7 +99,7 @@ def segment_rule_based(
     use_gpu: Optional[bool] = None,
 ) -> np.ndarray:
     """
-    Rule-based segmentation: Otsu + Distance Transform + DBSCAN + Voronoi
+    Advanced segmentation: Otsu + Distance Transform + DBSCAN + Voronoi
 
     Steps:
     1. Gaussian smoothing + Otsu thresholding
@@ -127,7 +127,7 @@ def segment_rule_based(
 
     Examples
     --------
-    >>> labels = segment_rule_based(height, meta, gaussian_sigma=1.5)
+    >>> labels = segment_advanced(height, meta, gaussian_sigma=1.5)
     >>> num_grains = labels.max()
     """
     pixel_nm = meta.get("pixel_nm", (1.0, 1.0)) if meta else (1.0, 1.0)
@@ -137,9 +137,9 @@ def segment_rule_based(
     _try_gpu = use_gpu if use_gpu is not None else True
     if _try_gpu:
         try:
-            from ._classical_gpu import is_gpu_available, segment_rule_based_gpu
+            from ._classical_gpu import is_gpu_available, segment_advanced_gpu
             if is_gpu_available():
-                return segment_rule_based_gpu(
+                return segment_advanced_gpu(
                     height, meta,
                     gaussian_sigma=gaussian_sigma,
                     min_area_px=min_area_px,

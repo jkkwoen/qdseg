@@ -24,7 +24,7 @@ from qdseg import (
     AFMData,
     segment_thresholding,
     segment_watershed,
-    segment_rule_based,
+    segment_advanced,
     calculate_grain_statistics,
 )
 
@@ -53,8 +53,8 @@ labels_thresh = segment_thresholding(height, meta)
 print("Segmenting: watershed …")
 labels_ws = segment_watershed(height, meta)
 
-print("Segmenting: rule_based (advanced) …")
-labels_rb = segment_rule_based(height, meta)
+print("Segmenting: advanced …")
+labels_rb = segment_advanced(height, meta)
 
 print("Segmenting: StarDist …")
 from qdseg.utils import setup_gpu_environment

@@ -40,7 +40,7 @@ def analyze_all_files_all_methods():
     
     from qdseg import (
         AFMData, 
-        segment_rule_based, 
+        segment_advanced, 
         calculate_grain_statistics,
     )
     
@@ -76,7 +76,7 @@ def analyze_all_files_all_methods():
             
             # Generate mask with Classical Segmentation
             # height_for_mask = data.get_data()
-            # labels_mask = segment_rule_based(
+            # labels_mask = segment_advanced(
             #     height_for_mask, 
             #     meta={'pixel_nm': data.get_meta().get('pixel_nm', (1.0, 1.0))},
             #     gaussian_sigma=1.0,
@@ -106,9 +106,9 @@ def analyze_all_files_all_methods():
                 'shape': height.shape,  # Image resolution (H, W)
             }
             
-            # === 1. Rule-based segmentation ===
-            print("   🔸 Rule-based segmentation...")
-            labels_classical = segment_rule_based(
+            # === 1. Advanced segmentation ===
+            print("   🔸 Advanced segmentation...")
+            labels_classical = segment_advanced(
                 height, meta,
                 gaussian_sigma=1.0,
                 min_area_px=10,
@@ -116,7 +116,7 @@ def analyze_all_files_all_methods():
             )
             stats_classical = calculate_grain_statistics(labels_classical, height, meta)
             
-            result['rule_based'] = {
+            result['advanced'] = {
                 'labels': labels_classical,
                 'num_grains': stats_classical['num_grains'],
                 'mean_diameter': stats_classical['mean_diameter_nm'],
@@ -374,7 +374,7 @@ def _save_comparison_figure_4methods(
     axes[0, 0].set_ylabel('Y [nm]')
     
     # 2. Rule-based
-    classical = result.get('rule_based', {})
+    classical = result.get('advanced', {})
     _plot_segmentation(
         axes[0, 1], height, 
         classical.get('labels'),
@@ -428,7 +428,7 @@ def _save_comparison_figure_4methods(
     
     # Create summary table
     methods = ['Rule-based', 'StarDist', 'Cellpose', 'Cellulus']
-    data_keys = ['rule_based', 'stardist', 'cellpose', 'cellulus']
+    data_keys = ['advanced', 'stardist', 'cellpose', 'cellulus']
     
     table_data = []
     for method, key in zip(methods, data_keys):
@@ -516,7 +516,7 @@ def _print_summary_4methods(results: List[Dict]):
     
     # Header
     methods = ['Rule-based', 'StarDist', 'Cellpose', 'Cellulus']
-    keys = ['rule_based', 'stardist', 'cellpose', 'cellulus']
+    keys = ['advanced', 'stardist', 'cellpose', 'cellulus']
     
     header1 = f"{'Filename':<26} {'Resolution':>7}"
     header2 = f"{'':26} {'':>7}"

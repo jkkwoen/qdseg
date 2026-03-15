@@ -326,7 +326,7 @@ def create_labeled_data_from_rule_based(
             review_with_napari=True,
         )
     """
-    from grain_analyzer import AFMData, segment_rule_based
+    from grain_analyzer import AFMData, segment_advanced
 
     images_dir = output_dir / "images"
     masks_dir = output_dir / "masks"
@@ -341,16 +341,16 @@ def create_labeled_data_from_rule_based(
             data = AFMData(str(xqd_file))
             data.first_correction().second_correction().third_correction()
             data.flat_correction("line_by_line").baseline_correction("min_to_zero")
-            
+
             height = data.get_data()
             meta = data.get_meta_data()
-            
+
             # Prepare image for Cellpose (0-255 range)
             pmin, pmax = np.percentile(height, [1, 99])
             height_uint8 = np.clip((height - pmin) / (pmax - pmin) * 255, 0, 255).astype(np.uint8)
-            
-            # Rule-based segmentation
-            labels = segment_rule_based(height, meta)
+
+            # Advanced segmentation
+            labels = segment_advanced(height, meta)
             
             # Save
             img_path = images_dir / f"{xqd_file.stem}.npy"

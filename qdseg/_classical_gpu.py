@@ -61,7 +61,7 @@ def _to_numpy(arr) -> np.ndarray:
 # Rule-based GPU
 # ---------------------------------------------------------------------------
 
-def segment_rule_based_gpu(
+def segment_advanced_gpu(
     height: np.ndarray,
     meta: Optional[Dict] = None,
     *,
@@ -69,7 +69,7 @@ def segment_rule_based_gpu(
     min_area_px: int = 10,
     min_peak_separation_nm: float = 10.0,
 ) -> np.ndarray:
-    """GPU version of segment_rule_based (Otsu + DT + DBSCAN + Voronoi)."""
+    """GPU version of segment_advanced (Otsu + DT + DBSCAN + Voronoi)."""
     import cupy as cp
     import cupyx.scipy.ndimage as cpndi
     from cucim.skimage.filters import gaussian as cu_gaussian
