@@ -75,9 +75,9 @@ print(f"Mean diameter: {stats['mean_diameter_nm']:.1f} nm")
 
 | Method | Type | Description | Extra install |
 |--------|:----:|-------------|:-------------:|
-| `advanced` | Rule-based | Otsu threshold → distance transform → DBSCAN peaks → Voronoi | — |
 | `thresholding` | Rule-based | Simple threshold + connected components | — |
 | `watershed` | Rule-based | Local maxima → watershed on Sobel gradient | — |
+| `advanced` | Rule-based | Otsu threshold → distance transform → DBSCAN peaks → Voronoi | — |
 | `stardist` | ML | Star-convex polygon DL (pre-trained `2D_versatile_fluo`) | `[stardist]` |
 | `cellpose` | ML | Gradient-flow DL (Cellpose-SAM, v4+) | `[cellpose]` |
 
