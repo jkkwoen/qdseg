@@ -87,7 +87,7 @@ def solidity_boundary_rgba(labels: np.ndarray,
                             convex_color=(0.18, 0.80, 0.18),
                             nonconvex_color=(0.90, 0.15, 0.15),
                             alpha: float = 0.9,
-                            thickness: int = 2) -> np.ndarray:
+                            thickness: int = 1) -> np.ndarray:
     """Return RGBA overlay where grain boundaries are coloured by solidity."""
     from skimage.morphology import dilation, disk
     rgba = np.zeros((*labels.shape, 4), dtype=np.float32)
