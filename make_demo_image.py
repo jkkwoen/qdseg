@@ -96,38 +96,36 @@ def solidity_boundary_rgba(labels: np.ndarray,
 
     bounds = find_boundaries(labels, mode="outer")
 
-    # Per-grain colour map on the boundary pixels
-    color_r = np.zeros(labels.shape, dtype=np.float32)
-    color_g = np.zeros(labels.shape, dtype=np.float32)
-    color_b = np.zeros(labels.shape, dtype=np.float32)
+    # Build per-pixel grain label map on boundary pixels, then dilate mask first
+    selem = disk(thickness)
+    thick_bounds = dilation(bounds, selem)
 
+    # Assign colours based on the nearest grain label
+    # Use dilated label map: dilate labels image so every thick_bound pixel
+    # inherits the label of its nearest grain
+    from skimage.morphology import dilation as _dil
+    # Label each boundary pixel with its owning grain (inner side)
+    label_on_bound = np.where(bounds, labels, 0)
+    # If boundary pixel has label 0, grab the inner neighbour
     by, bx = np.where(bounds)
     for y, x in zip(by, bx):
-        lbl = labels[y, x]
-        if lbl == 0:
+        if label_on_bound[y, x] == 0:
             for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
                 ny, nx = y+dy, x+dx
                 if 0 <= ny < labels.shape[0] and 0 <= nx < labels.shape[1]:
                     if labels[ny, nx] > 0:
-                        lbl = labels[ny, nx]
+                        label_on_bound[y, x] = labels[ny, nx]
                         break
+    # Dilate label_on_bound so thick pixels inherit the same label
+    label_thick = _dil(label_on_bound, selem)
+
+    # Paint colours
+    for y, x in zip(*np.where(thick_bounds)):
+        lbl = label_thick[y, x]
         sol = solidity.get(lbl, 1.0)
         c = convex_color if sol >= 0.9 else nonconvex_color
-        color_r[y, x] = c[0]
-        color_g[y, x] = c[1]
-        color_b[y, x] = c[2]
-
-    # Dilate boundary mask and colour channels together
-    selem = disk(thickness)
-    thick_bounds = dilation(bounds, selem)
-    color_r = dilation(color_r, selem)
-    color_g = dilation(color_g, selem)
-    color_b = dilation(color_b, selem)
-
-    rgba[thick_bounds, 0] = color_r[thick_bounds]
-    rgba[thick_bounds, 1] = color_g[thick_bounds]
-    rgba[thick_bounds, 2] = color_b[thick_bounds]
-    rgba[thick_bounds, 3] = alpha
+        rgba[y, x, :3] = c
+        rgba[y, x,  3] = alpha
     return rgba
 
 # ── 3. Figure ─────────────────────────────────────────────────────────────────
