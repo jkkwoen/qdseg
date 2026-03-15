@@ -42,8 +42,8 @@ data.baseline_correction("min_to_zero")
 height = data.get_data()
 meta   = data.get_meta()
 px_nm  = meta.get("pixel_nm", (1.0, 1.0))[0]
-scan   = height.shape[1] * px_nm
-extent = [0, scan, 0, scan]
+scan_um = height.shape[1] * px_nm / 1000.0
+extent = [0, scan_um, 0, scan_um]
 
 # ── 1. Segmentation ───────────────────────────────────────────────────────────
 
@@ -93,19 +93,25 @@ def paint_boundaries(rgb: np.ndarray, labels: np.ndarray,
     props = regionprops(labels)
     solidity = {p.label: p.solidity for p in props}
 
-    # Inner boundary: pixels just inside each grain edge
+    # Inner boundary: pixels are inside the grain → labels[y,x] gives own label
     bounds = find_boundaries(labels, mode="inner")
 
-    # Dilate the integer label map so boundary pixels keep their grain's label
-    selem = disk(thickness)
-    label_dilated = dilation(labels, selem)
-    thick_bounds = dilation(bounds, selem)
-
-    ys, xs = np.where(thick_bounds)
+    # Assign color index on inner boundary pixels: 1=convex, 2=nonconvex
+    # Inner boundary pixels always carry their own grain's label
+    index = np.zeros(labels.shape, dtype=np.uint8)
+    ys, xs = np.where(bounds)
     for y, x in zip(ys, xs):
-        lbl = label_dilated[y, x]
+        lbl = labels[y, x]
         sol = solidity.get(lbl, 1.0)
-        out[y, x] = convex_color if sol >= 0.9 else nonconvex_color
+        index[y, x] = 1 if sol >= 0.95 else 2
+
+    # Dilate index map — max dilation, single integer array, no channel mixing
+    selem = disk(thickness)
+    index = dilation(index, selem)
+
+    # Paint: index>0 pixels get their assigned color
+    out[index == 1] = convex_color
+    out[index == 2] = nonconvex_color
     return out
 
 # ── 3. Figure ─────────────────────────────────────────────────────────────────
@@ -135,8 +141,10 @@ for ax, (title, labels) in zip(axes.flat, PANELS):
     else:
         img = gray_rgb
     ax.imshow(img, origin="lower", extent=extent, interpolation="bilinear")
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=5, linespacing=1.3)
-    ax.axis("off")
+    ax.set_title(title, fontsize=13, fontweight="bold", pad=5, linespacing=1.3)
+    ax.set_xlabel("μm", fontsize=8)
+    ax.set_ylabel("μm", fontsize=8)
+    ax.tick_params(labelsize=7)
 
 out = Path("docs/demo.png")
 out.parent.mkdir(parents=True, exist_ok=True)
