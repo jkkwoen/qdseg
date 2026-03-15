@@ -17,7 +17,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
+matplotlib.rcParams["font.family"] = "Helvetica Neue"
 from skimage.segmentation import find_boundaries
 
 from qdseg import (
@@ -83,50 +83,30 @@ labels_cp = result[0].astype(np.int32)
 
 from skimage.measure import regionprops
 
-def solidity_boundary_rgba(labels: np.ndarray,
-                            convex_color=(0.18, 0.80, 0.18),
-                            nonconvex_color=(0.90, 0.15, 0.15),
-                            alpha: float = 0.9,
-                            thickness: int = 1) -> np.ndarray:
-    """Return RGBA overlay where grain boundaries are coloured by solidity."""
+def paint_boundaries(rgb: np.ndarray, labels: np.ndarray,
+                     convex_color=(46, 204, 46),
+                     nonconvex_color=(230, 38, 38),
+                     thickness: int = 1) -> np.ndarray:
+    """Directly paint boundary pixels onto an RGB uint8 image. No blending."""
     from skimage.morphology import dilation, disk
-    rgba = np.zeros((*labels.shape, 4), dtype=np.float32)
+    out = rgb.copy()
     props = regionprops(labels)
     solidity = {p.label: p.solidity for p in props}
 
-    bounds = find_boundaries(labels, mode="outer")
+    # Inner boundary: pixels just inside each grain edge
+    bounds = find_boundaries(labels, mode="inner")
 
-    # Build per-pixel grain label map on boundary pixels, then dilate mask first
+    # Dilate the integer label map so boundary pixels keep their grain's label
     selem = disk(thickness)
+    label_dilated = dilation(labels, selem)
     thick_bounds = dilation(bounds, selem)
 
-    # Assign colours based on the nearest grain label
-    # Use dilated label map: dilate labels image so every thick_bound pixel
-    # inherits the label of its nearest grain
-    from skimage.morphology import dilation as _dil
-    # Label each boundary pixel with its owning grain (inner side)
-    label_on_bound = np.where(bounds, labels, 0)
-    # If boundary pixel has label 0, grab the inner neighbour
-    by, bx = np.where(bounds)
-    for y, x in zip(by, bx):
-        if label_on_bound[y, x] == 0:
-            for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
-                ny, nx = y+dy, x+dx
-                if 0 <= ny < labels.shape[0] and 0 <= nx < labels.shape[1]:
-                    if labels[ny, nx] > 0:
-                        label_on_bound[y, x] = labels[ny, nx]
-                        break
-    # Dilate label_on_bound so thick pixels inherit the same label
-    label_thick = _dil(label_on_bound, selem)
-
-    # Paint colours
-    for y, x in zip(*np.where(thick_bounds)):
-        lbl = label_thick[y, x]
+    ys, xs = np.where(thick_bounds)
+    for y, x in zip(ys, xs):
+        lbl = label_dilated[y, x]
         sol = solidity.get(lbl, 1.0)
-        c = convex_color if sol >= 0.9 else nonconvex_color
-        rgba[y, x, :3] = c
-        rgba[y, x,  3] = alpha
-    return rgba
+        out[y, x] = convex_color if sol >= 0.9 else nonconvex_color
+    return out
 
 # ── 3. Figure ─────────────────────────────────────────────────────────────────
 
@@ -140,21 +120,23 @@ PANELS = [
 ]
 
 vmin, vmax = np.percentile(height, [1, 99])
-norm = Normalize(vmin=vmin, vmax=vmax)
+
+# Convert height to uint8 RGB once
+gray_norm = np.clip((height - vmin) / (vmax - vmin + 1e-10), 0, 1)
+gray_uint8 = (gray_norm * 255).astype(np.uint8)
+gray_rgb = np.stack([gray_uint8] * 3, axis=-1)  # H×W×3
 
 fig, axes = plt.subplots(2, 3, figsize=(15, 11.0), facecolor="white",
                          gridspec_kw={"hspace": 0.28, "wspace": 0.12})
 
 for ax, (title, labels) in zip(axes.flat, PANELS):
-    ax.imshow(height, cmap="gray", origin="lower", extent=extent,
-              norm=norm, interpolation="bilinear")
     if labels is not None:
-        overlay = solidity_boundary_rgba(labels)
-        ax.imshow(overlay, origin="lower", extent=extent, interpolation="none")
+        img = paint_boundaries(gray_rgb, labels)
+    else:
+        img = gray_rgb
+    ax.imshow(img, origin="lower", extent=extent, interpolation="bilinear")
     ax.set_title(title, fontsize=11, fontweight="bold", pad=5, linespacing=1.3)
-    ax.set_xlabel("x (nm)", fontsize=8)
-    ax.set_ylabel("y (nm)", fontsize=8)
-    ax.tick_params(labelsize=7)
+    ax.axis("off")
 
 out = Path("docs/demo.png")
 out.parent.mkdir(parents=True, exist_ok=True)
