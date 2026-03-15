@@ -1,6 +1,8 @@
 """
-Generate docs/demo.png — a side-by-side figure of a synthetic AFM image
+Generate docs/demo.png — a side-by-side figure of a real AFM image
 and the rule_based segmentation result, suitable for the README.
+
+Source: b2827_x-2_y-30_1um.xqd
 """
 
 import numpy as np
@@ -10,44 +12,21 @@ import matplotlib.pyplot as plt
 from skimage.segmentation import find_boundaries
 from pathlib import Path
 
-from qdseg import segment_rule_based, calculate_grain_statistics
+from qdseg import AFMData, segment_rule_based, calculate_grain_statistics
 
 
-# ── 1. Synthetic AFM image ──────────────────────────────────────────────────
+# ── 1. Load and correct real XQD file ───────────────────────────────────────
 
-RNG = np.random.default_rng(42)
+XQD_PATH = Path.home() / "data_raw/afm_nanonavi/2017/20170215/b2827_x-2_y-30_1um.xqd"
 
-SIZE_PX   = 256          # image pixels
-PIXEL_NM  = 2.0          # nm per pixel  →  512 × 512 nm scan
-N_QD      = 60           # number of QDs
-HEIGHT_NM = 8.0          # typical QD height (nm)
-BG_NOISE  = 0.3          # background noise amplitude (nm)
+data = AFMData(str(XQD_PATH))
+data.first_correction().second_correction().third_correction()
+data.align_rows(method='median')
+data.flat_correction("line_by_line")
+data.baseline_correction("min_to_zero")
 
-height = np.zeros((SIZE_PX, SIZE_PX), dtype=np.float32)
-
-# Random QD positions (avoid edges)
-margin = 12
-xs = RNG.integers(margin, SIZE_PX - margin, N_QD)
-ys = RNG.integers(margin, SIZE_PX - margin, N_QD)
-
-# Random QD sizes (sigma in pixels, ≈ 10–18 nm diameter)
-sigmas = RNG.uniform(2.5, 4.5, N_QD)
-peak_h = RNG.uniform(0.6, 1.0, N_QD) * HEIGHT_NM
-
-yy, xx = np.mgrid[0:SIZE_PX, 0:SIZE_PX]
-
-for x0, y0, sig, h in zip(xs, ys, sigmas, peak_h):
-    height += h * np.exp(-((xx - x0)**2 + (yy - y0)**2) / (2 * sig**2))
-
-# Add low-frequency background tilt + noise
-height += np.linspace(0, 1.5, SIZE_PX)[np.newaxis, :] * np.ones((SIZE_PX, 1))
-height += BG_NOISE * RNG.standard_normal((SIZE_PX, SIZE_PX)).astype(np.float32)
-height = np.clip(height, 0, None)
-
-meta = {
-    "pixel_nm": (PIXEL_NM, PIXEL_NM),
-    "scan_size_nm": (SIZE_PX * PIXEL_NM, SIZE_PX * PIXEL_NM),
-}
+height = data.get_data()
+meta   = data.get_meta()
 
 # ── 2. Segmentation ─────────────────────────────────────────────────────────
 
@@ -61,8 +40,11 @@ stats = calculate_grain_statistics(labels, height, meta)
 
 # ── 3. Figure ───────────────────────────────────────────────────────────────
 
-SCAN_NM = SIZE_PX * PIXEL_NM
-extent  = [0, SCAN_NM, 0, SCAN_NM]
+pixel_nm  = meta.get("pixel_nm", (1.0, 1.0))
+scan_size = meta.get("scan_size_nm", (height.shape[1] * pixel_nm[0], height.shape[0] * pixel_nm[1]))
+PIXEL_NM  = pixel_nm[0]
+SCAN_NM   = scan_size[0]
+extent    = [0, scan_size[0], 0, scan_size[1]]
 
 vmin = np.percentile(height, 1)
 vmax = np.percentile(height, 99)
@@ -84,7 +66,7 @@ im = axes[0].imshow(
     height, cmap="afmhot", origin="lower", extent=extent,
     vmin=vmin, vmax=vmax, interpolation="bilinear",
 )
-axes[0].set_title("AFM height map  (synthetic)", fontsize=11)
+axes[0].set_title("AFM height map", fontsize=11)
 axes[0].set_xlabel("X  [nm]")
 axes[0].set_ylabel("Y  [nm]")
 cb = fig.colorbar(im, ax=axes[0], fraction=0.046, pad=0.04)
