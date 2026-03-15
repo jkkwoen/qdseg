@@ -158,13 +158,6 @@ for ax, (title, labels) in zip(axes.flat, PANELS):
     ax.set_ylabel("y (nm)", fontsize=8)
     ax.tick_params(labelsize=7)
 
-fig.text(
-    0.5, 0.005,
-    "  green = convex grain     red = non-convex grain     sample: b2823  |  1 × 1 µm  ",
-    ha="center", va="bottom", fontsize=9, color="#555",
-    bbox=dict(boxstyle="round,pad=0.3", facecolor="#f5f5f5", edgecolor="#ccc"),
-)
-
 out = Path("docs/demo.png")
 out.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
