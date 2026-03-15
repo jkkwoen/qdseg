@@ -22,7 +22,31 @@ from .segmentation import (
     segment_cellpose,
 )
 from .statistics import calculate_grain_statistics, get_individual_grains
+from skimage.measure import regionprops
 from skimage.segmentation import find_boundaries
+
+
+def _filter_small_labels(labels: np.ndarray, min_area_px: int = 10) -> np.ndarray:
+    """Remove label regions smaller than min_area_px pixels.
+
+    Parameters
+    ----------
+    labels : np.ndarray
+        Integer label image (0 = background).
+    min_area_px : int
+        Minimum region area in pixels. Regions strictly smaller than this
+        value are set to 0 (background).
+
+    Returns
+    -------
+    np.ndarray
+        Label image with small regions removed (same dtype as input).
+    """
+    result = labels.copy()
+    for prop in regionprops(labels):
+        if prop.area < min_area_px:
+            result[labels == prop.label] = 0
+    return result
 
 
 def analyze_grains(
