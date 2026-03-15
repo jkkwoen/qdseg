@@ -73,13 +73,13 @@ print(f"Mean diameter: {stats['mean_diameter_nm']:.1f} nm")
 
 ## Segmentation methods
 
-| Method | Description | Extra install |
-|--------|-------------|:-------------:|
-| `advanced` | Otsu threshold → distance transform → DBSCAN peaks → Voronoi | — |
-| `thresholding` | Simple threshold + connected components | — |
-| `watershed` | Local maxima → watershed on Sobel gradient | — |
-| `stardist` | Star-convex polygon DL (pre-trained `2D_versatile_fluo`) | `[stardist]` |
-| `cellpose` | Gradient-flow DL (Cellpose-SAM, v4+) | `[cellpose]` |
+| Method | Type | Description | Extra install |
+|--------|:----:|-------------|:-------------:|
+| `advanced` | Rule-based | Otsu threshold → distance transform → DBSCAN peaks → Voronoi | — |
+| `thresholding` | Rule-based | Simple threshold + connected components | — |
+| `watershed` | Rule-based | Local maxima → watershed on Sobel gradient | — |
+| `stardist` | ML | Star-convex polygon DL (pre-trained `2D_versatile_fluo`) | `[stardist]` |
+| `cellpose` | ML | Gradient-flow DL (Cellpose-SAM, v4+) | `[cellpose]` |
 
 **Not sure which to use?** Start with `advanced` — it requires no extra install and works well for standard QD samples. Try `stardist` or `cellpose` if grain boundaries are ambiguous.
 
