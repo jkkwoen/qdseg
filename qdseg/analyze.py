@@ -11,7 +11,6 @@ High-level pipeline that combines segmentation and statistics.
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
-import matplotlib.pyplot as plt
 
 from .afm_data_wrapper import AFMData
 from .segmentation import (
@@ -280,11 +279,14 @@ def _create_grain_analysis_pdf(
     method: str = "classical"
 ) -> Path:
     """Create PDF with original and grain_mask plots."""
-    
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_pdf import FigureCanvasPdf
+
     pdf_path = output_dir / f"{stem}_grain_analysis_{method}.pdf"
-    
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
-    
+
+    fig = Figure(figsize=(16, 8))
+    axes = fig.subplots(1, 2)
+
     # Left: Original height data
     vmin_raw, vmax_raw = np.percentile(height_raw, [2, 98])
     im1 = axes[0].imshow(height_raw, cmap='gray', origin='lower', extent=extent,
@@ -292,19 +294,19 @@ def _create_grain_analysis_pdf(
     axes[0].set_xlabel('X [nm]')
     axes[0].set_ylabel('Y [nm]')
     axes[0].set_title('Original Height Data')
-    plt.colorbar(im1, ax=axes[0], label='Height [nm]')
-    
+    fig.colorbar(im1, ax=axes[0], label='Height [nm]')
+
     # Right: Grain mask overlay
     vmin_corr, vmax_corr = np.percentile(height_corrected, [2, 98])
-    im2 = axes[1].imshow(height_corrected, cmap='gray', origin='lower', extent=extent,
-                         vmin=vmin_corr, vmax=vmax_corr)
-    
+    axes[1].imshow(height_corrected, cmap='gray', origin='lower', extent=extent,
+                   vmin=vmin_corr, vmax=vmax_corr)
+
     # Overlay grain labels with colormap
     if grain_labels.max() > 0:
-        im3 = axes[1].imshow(grain_labels, cmap='tab20', origin='lower', extent=extent, 
-                            alpha=0.5, vmin=0, vmax=grain_labels.max())
-        plt.colorbar(im3, ax=axes[1], label='Grain ID')
-    
+        im3 = axes[1].imshow(grain_labels, cmap='tab20', origin='lower', extent=extent,
+                             alpha=0.5, vmin=0, vmax=grain_labels.max())
+        fig.colorbar(im3, ax=axes[1], label='Grain ID')
+
     # Draw boundaries
     if np.any(boundaries):
         y_coords, x_coords = np.where(boundaries)
@@ -314,17 +316,16 @@ def _create_grain_analysis_pdf(
             axes[1].scatter(x_nm, y_nm, c='red', s=0.1, alpha=0.6)
         else:
             axes[1].scatter(x_coords, y_coords, c='red', s=0.1, alpha=0.6)
-    
+
     axes[1].set_xlabel('X [nm]')
     axes[1].set_ylabel('Y [nm]')
     axes[1].set_title(f'Grain Mask Overlay ({method}, N={num_grains})')
-    
+
     fig.suptitle(f'Grain Analysis - {stem}', fontsize=14, fontweight='bold')
-    plt.tight_layout()
-    
-    plt.savefig(pdf_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    
+    fig.tight_layout()
+
+    FigureCanvasPdf(fig).print_figure(str(pdf_path), dpi=300, bbox_inches='tight')
+
     print(f"   ✓ PDF saved: {pdf_path}")
-    
+
     return pdf_path
