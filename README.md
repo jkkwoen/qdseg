@@ -31,18 +31,21 @@ The simplest way to process a single file:
 from pathlib import Path
 from qdseg import analyze_single_file_with_grain_data
 
-success, grains, stats, pdf_path = analyze_single_file_with_grain_data(
+success, grains, stats, data_dir = analyze_single_file_with_grain_data(
     xqd_file=Path("sample.xqd"),
     output_dir=Path("output"),
     method="advanced",   # no extra install required
 )
 
 print(f"QDs detected : {stats['num_grains']}")
-print(f"Mean diameter: {stats['mean_diameter_nm']:.1f} nm")
-print(f"Report saved : {pdf_path}")
+print(f"Mean height  : {stats['mean_height_nm']:.1f} nm")
+print(f"Data saved   : {data_dir}")
 ```
 
-This handles loading, all corrections, segmentation, statistics, and PDF export in one call.
+This handles loading, all corrections, segmentation, statistics, and data export in one call.
+Results are saved to `output/sample/`:
+- `sample_stats.json` — overall statistics
+- `sample_grains.csv` — per-grain measurements (one row per grain)
 
 ### Option B — Step-by-step (for custom pipelines)
 

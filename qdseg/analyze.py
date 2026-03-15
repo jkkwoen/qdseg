@@ -8,6 +8,8 @@ High-level pipeline that combines segmentation and statistics.
     >>> result = analyze_grains(height, meta, method="classical")
 """
 
+import csv
+import json
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
@@ -46,6 +48,42 @@ def _filter_small_labels(labels: np.ndarray, min_area_px: int = 10) -> np.ndarra
         if prop.area < min_area_px:
             result[labels == prop.label] = 0
     return result
+
+
+def _save_analysis_data(
+    stats: Dict[str, Any],
+    grains: List[Dict[str, Any]],
+    output_dir: Path,
+    stem: str,
+) -> None:
+    """Save overall stats as JSON and per-grain data as CSV.
+
+    Files written:
+      - ``{output_dir}/{stem}_stats.json``
+      - ``{output_dir}/{stem}_grains.csv``
+    """
+    class _NpEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.floating):
+                return float(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            return super().default(obj)
+
+    stats_path = output_dir / f"{stem}_stats.json"
+    with open(stats_path, "w") as f:
+        json.dump(stats, f, indent=2, cls=_NpEncoder)
+
+    if grains:
+        grains_path = output_dir / f"{stem}_grains.csv"
+        with open(grains_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=grains[0].keys())
+            writer.writeheader()
+            writer.writerows(grains)
+
+    print(f"   ✓ Data saved: {output_dir.name}/")
 
 
 def analyze_grains(
@@ -133,18 +171,23 @@ def analyze_single_file_with_grain_data(
     gaussian_sigma: float = 1.0,
     min_area_nm2: float = 78.5,
     min_peak_separation_nm: float = 10.0,
-    save_pdf: bool = True,
+    save_pdf: bool = False,
     **kwargs
-) -> Tuple[bool, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[str]]:
+) -> Tuple[bool, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Path]]:
     """
     Analyze a single XQD file and return grain data and statistics.
+
+    Always saves analysis results to output_dir:
+      - ``{stem}_stats.json``  — overall statistics
+      - ``{stem}_grains.csv``  — per-grain measurements
 
     Parameters
     ----------
     xqd_file : Path
         Path to the XQD file
     output_dir : Path
-        Output directory for PDF file (only used when save_pdf=True)
+        Directory where stats JSON and grains CSV are saved.
+        A subdirectory named after the file stem is created automatically.
     method : str
         Segmentation method (default: 'advanced')
         - 'advanced': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
@@ -159,16 +202,15 @@ def analyze_single_file_with_grain_data(
     min_peak_separation_nm : float
         Minimum peak separation in nm (for advanced method)
     save_pdf : bool
-        Whether to generate and save a PDF report (default: True).
-        Set to False to skip PDF generation and improve performance.
+        Whether to also generate a PDF report (default: False).
     **kwargs
         Additional arguments for segmentation (method-specific)
 
     Returns
     -------
-    Tuple[bool, Optional[Dict], Optional[Dict], Optional[str]]
-        (success, individual_grain_data, grain_stats, pdf_path)
-        pdf_path is None when save_pdf=False
+    Tuple[bool, Optional[Dict], Optional[Dict], Optional[Path]]
+        (success, individual_grain_data, grain_stats, data_dir)
+        data_dir is the subdirectory where results were saved (None on failure)
     """
     from .utils import nm2_to_px_area
 
@@ -241,24 +283,24 @@ def analyze_single_file_with_grain_data(
         individual_grain_data = get_individual_grains(labels, height_corrected, meta)
         grain_stats = calculate_grain_statistics(labels, height_corrected, meta, _precomputed_grains=individual_grain_data)
 
+        # Save data
+        file_output_dir = output_dir / xqd_file.stem
+        file_output_dir.mkdir(parents=True, exist_ok=True)
+        _save_analysis_data(grain_stats, individual_grain_data, file_output_dir, xqd_file.stem)
+
         # Create PDF (optional)
-        pdf_path = None
         if save_pdf:
             print("   📄 Creating PDF plot...")
             grain_mask = labels > 0
             boundaries = find_boundaries(labels, mode="outer") if num_grains > 0 else np.zeros_like(labels, dtype=bool)
-
-            file_output_dir = output_dir / xqd_file.stem
-            file_output_dir.mkdir(parents=True, exist_ok=True)
-
-            pdf_path = str(_create_grain_analysis_pdf(
+            _create_grain_analysis_pdf(
                 height_raw, height_corrected, grain_mask, labels, boundaries,
                 xqd_file.stem, file_output_dir, extent, num_grains, method
-            ))
+            )
 
         print(f"   ✅ Analysis completed for {xqd_file.name}")
-        return True, individual_grain_data, grain_stats, pdf_path
-        
+        return True, individual_grain_data, grain_stats, file_output_dir
+
     except Exception as e:
         print(f"   ❌ Error processing {xqd_file.name}: {e}")
         import traceback
