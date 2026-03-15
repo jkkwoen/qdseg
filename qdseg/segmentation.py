@@ -277,25 +277,28 @@ def segment_watershed(
     # 1. Remove noise with Gaussian blur
     height_smoothed = filters.gaussian(height, sigma=gaussian_sigma, preserve_range=True)
 
-    # 2. Detect local maxima (grain peaks)
-    # scikit-image 0.18+ compatible: indices parameter removed
+    # 2. Otsu thresholding — background mask
+    binary = height_smoothed > threshold_otsu(height_smoothed)
+    binary = morphology.remove_small_objects(binary, min_size=min_area_px)
+
+    # 3. Detect local maxima (grain peaks) within binary mask
     local_max_coords = peak_local_max(
         height_smoothed,
         min_distance=min_distance,
+        labels=binary,
     )
-    
+
     # Convert coordinates to boolean mask
     local_max = np.zeros(height_smoothed.shape, dtype=bool)
     if len(local_max_coords) > 0:
         local_max[tuple(local_max_coords.T)] = True
 
-    # 3. Create markers
+    # 4. Create markers
     markers = ndi.label(local_max)[0]
 
-    # 4. Watershed segmentation
-    # Watershed is typically performed on a gradient image
+    # 5. Watershed segmentation with binary mask (background excluded)
     gradient = filters.sobel(height_smoothed)
-    labeled_image = segmentation.watershed(gradient, markers)
+    labeled_image = segmentation.watershed(gradient, markers, mask=binary)
 
     # 5. Remove small regions
     with warnings.catch_warnings():

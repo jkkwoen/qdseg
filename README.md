@@ -111,7 +111,7 @@ print(f"Mean diameter: {stats['mean_diameter_nm']:.1f} nm")
 pip install git+https://github.com/jkkwoen/qdseg.git
 ```
 
-### With deep-learning backends
+### Advanced (StarDist / Cellpose)
 
 ```bash
 # StarDist (TensorFlow)
