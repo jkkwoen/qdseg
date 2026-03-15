@@ -31,10 +31,10 @@ data.first_correction()
 data.second_correction()
 data.third_correction()
 data.flat_correction("line_by_line")
-data.baseline_correction("min_to_zero")
+preprocessed_data = data.baseline_correction("min_to_zero")
 
-data.segment()                     # default: method='advanced'
-stats = data.stats()
+preprocessed_data.segment(method='advanced')  # 'thresholding', 'watershed', 'stardist', 'cellpose'
+stats = preprocessed_data.stats()
 
 print(f"QDs detected : {stats['num_grains']}")
 print(f"Mean height  : {stats['mean_height_nm']:.1f} nm")
