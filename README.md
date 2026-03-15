@@ -43,9 +43,21 @@ print(f"Data saved   : {data_dir}")
 ```
 
 This handles loading, all corrections, segmentation, statistics, and data export in one call.
-Results are saved to `output/sample/`:
+Results are saved to `output/sample/` by default:
 - `sample_stats.json` — overall statistics
 - `sample_grains.csv` — per-grain measurements (one row per grain)
+
+To save files to custom paths, use `stats_path` / `grains_path`:
+
+```python
+success, grains, stats, data_dir = analyze_single_file_with_grain_data(
+    xqd_file=Path("sample.xqd"),
+    output_dir=Path("output"),
+    method="advanced",
+    stats_path=Path("results/my_stats.json"),
+    grains_path=Path("results/my_grains.csv"),
+)
+```
 
 ### Option B — Step-by-step (for custom pipelines)
 
@@ -57,7 +69,6 @@ data = AFMData("sample.xqd")
 
 # 2. Correct AFM artefacts (see "AFM corrections" section for details)
 data.first_correction().second_correction().third_correction()
-data.align_rows(method='median')
 data.flat_correction("line_by_line")
 data.baseline_correction("min_to_zero")
 
@@ -69,7 +80,7 @@ labels = segment_advanced(height, meta)
 # 4. Statistics
 stats = calculate_grain_statistics(labels, height, meta)
 print(f"QDs detected : {stats['num_grains']}")
-print(f"Mean diameter: {stats['mean_diameter_nm']:.1f} nm")
+print(f"Mean height  : {stats['mean_height_nm']:.1f} nm")
 ```
 
 ---

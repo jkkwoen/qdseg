@@ -53,15 +53,10 @@ def _filter_small_labels(labels: np.ndarray, min_area_px: int = 10) -> np.ndarra
 def _save_analysis_data(
     stats: Dict[str, Any],
     grains: List[Dict[str, Any]],
-    output_dir: Path,
-    stem: str,
+    stats_path: Path,
+    grains_path: Path,
 ) -> None:
-    """Save overall stats as JSON and per-grain data as CSV.
-
-    Files written:
-      - ``{output_dir}/{stem}_stats.json``
-      - ``{output_dir}/{stem}_grains.csv``
-    """
+    """Save overall stats as JSON and per-grain data as CSV."""
     class _NpEncoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, np.integer):
@@ -72,18 +67,18 @@ def _save_analysis_data(
                 return obj.tolist()
             return super().default(obj)
 
-    stats_path = output_dir / f"{stem}_stats.json"
+    stats_path.parent.mkdir(parents=True, exist_ok=True)
     with open(stats_path, "w") as f:
         json.dump(stats, f, indent=2, cls=_NpEncoder)
 
     if grains:
-        grains_path = output_dir / f"{stem}_grains.csv"
+        grains_path.parent.mkdir(parents=True, exist_ok=True)
         with open(grains_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=grains[0].keys())
             writer.writeheader()
             writer.writerows(grains)
 
-    print(f"   ✓ Data saved: {output_dir.name}/")
+    print(f"   ✓ Data saved: {stats_path.name}, {grains_path.name}")
 
 
 def analyze_grains(
@@ -169,25 +164,30 @@ def analyze_single_file_with_grain_data(
     output_dir: Path,
     method: str = "advanced",
     gaussian_sigma: float = 1.0,
-    min_area_nm2: float = 78.5,
+    min_area_px: int = 10,
     min_peak_separation_nm: float = 10.0,
     save_pdf: bool = False,
+    stats_path: Optional[Path] = None,
+    grains_path: Optional[Path] = None,
     **kwargs
 ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Path]]:
     """
     Analyze a single XQD file and return grain data and statistics.
 
-    Always saves analysis results to output_dir:
+    Always saves analysis results:
       - ``{stem}_stats.json``  — overall statistics
       - ``{stem}_grains.csv``  — per-grain measurements
+
+    By default both files are written to ``output_dir/{stem}/``.
+    Use ``stats_path`` / ``grains_path`` to override individual file locations.
 
     Parameters
     ----------
     xqd_file : Path
         Path to the XQD file
     output_dir : Path
-        Directory where stats JSON and grains CSV are saved.
-        A subdirectory named after the file stem is created automatically.
+        Base output directory.  A subdirectory named after the file stem is
+        created automatically unless ``stats_path`` / ``grains_path`` are given.
     method : str
         Segmentation method (default: 'advanced')
         - 'advanced': Otsu + Distance + DBSCAN + Voronoi (default, recommended)
@@ -197,12 +197,18 @@ def analyze_single_file_with_grain_data(
         - 'cellpose': CellPose deep learning
     gaussian_sigma : float
         Gaussian smoothing sigma (for advanced and watershed methods)
-    min_area_nm2 : float
-        Minimum grain area in nm²
+    min_area_px : int
+        Minimum grain area in pixels (default: 10, same as segment_advanced default)
     min_peak_separation_nm : float
         Minimum peak separation in nm (for advanced method)
     save_pdf : bool
         Whether to also generate a PDF report (default: False).
+    stats_path : Path, optional
+        Explicit destination for the stats JSON file.
+        Overrides the default ``output_dir/{stem}/{stem}_stats.json``.
+    grains_path : Path, optional
+        Explicit destination for the grains CSV file.
+        Overrides the default ``output_dir/{stem}/{stem}_grains.csv``.
     **kwargs
         Additional arguments for segmentation (method-specific)
 
@@ -210,10 +216,8 @@ def analyze_single_file_with_grain_data(
     -------
     Tuple[bool, Optional[Dict], Optional[Dict], Optional[Path]]
         (success, individual_grain_data, grain_stats, data_dir)
-        data_dir is the subdirectory where results were saved (None on failure)
+        data_dir is the directory where results were saved (None on failure)
     """
-    from .utils import nm2_to_px_area
-
     print(f"📊 Processing: {xqd_file.name}")
 
     try:
@@ -225,19 +229,15 @@ def analyze_single_file_with_grain_data(
         print("   🔬 Applying corrections...")
         data.first_correction().second_correction().third_correction()
         data.flat_correction("line_by_line").baseline_correction("min_to_zero")
-        
+
         # Get data
         height_corrected = data.get_data()
         meta = data.get_meta()
         height_raw = data.get_raw_data()
-        
-        pixel_nm = meta.get("pixel_nm", (1.0, 1.0))
+
         x_size_nm, y_size_nm = meta.get("scan_size_nm", (height_raw.shape[1], height_raw.shape[0]))
         extent = [0, x_size_nm, 0, y_size_nm]
-        
-        # Calculate min_area_px (for classical method)
-        min_area_px = nm2_to_px_area(min_area_nm2, pixel_nm)
-        
+
         method = method.lower()
 
         # Perform segmentation
@@ -286,7 +286,9 @@ def analyze_single_file_with_grain_data(
         # Save data
         file_output_dir = output_dir / xqd_file.stem
         file_output_dir.mkdir(parents=True, exist_ok=True)
-        _save_analysis_data(grain_stats, individual_grain_data, file_output_dir, xqd_file.stem)
+        resolved_stats_path = stats_path or file_output_dir / f"{xqd_file.stem}_stats.json"
+        resolved_grains_path = grains_path or file_output_dir / f"{xqd_file.stem}_grains.csv"
+        _save_analysis_data(grain_stats, individual_grain_data, resolved_stats_path, resolved_grains_path)
 
         # Create PDF (optional)
         if save_pdf:
