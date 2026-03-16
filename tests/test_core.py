@@ -472,6 +472,24 @@ class TestRealXQD:
         grains = self.pre.grains()
         assert len(grains) == stats["num_grains"]
 
+    def test_segment_stardist(self):
+        """StarDist segmentation detects grains on real data (skipped if not installed)."""
+        pytest.importorskip("stardist")
+        from qdseg import AFMData
+        pre = AFMData(str(_TEST_XQD)).baseline_correction()
+        pre.segment(method="stardist")
+        assert pre.labels.max() >= 1
+        assert pre.stats()["num_grains"] >= 1
+
+    def test_segment_cellpose(self):
+        """Cellpose segmentation detects grains on real data (skipped if not installed)."""
+        pytest.importorskip("cellpose")
+        from qdseg import AFMData
+        pre = AFMData(str(_TEST_XQD)).baseline_correction()
+        pre.segment(method="cellpose")
+        assert pre.labels.max() >= 1
+        assert pre.stats()["num_grains"] >= 1
+
 
 # ─── entry point ────────────────────────────────────────────────────────────
 
