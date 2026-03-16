@@ -1,11 +1,11 @@
 # QDSeg
 
-**Quantum dot segmentation and statistics for AFM images (XQD format)**
+**Quantum dot segmentation and statistics for AFM images**
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Load an XQD file, correct artefacts, detect quantum dots, and get per-grain statistics — in a few lines of Python.
+Load an AFM height file, correct artefacts, detect quantum dots, and get per-grain statistics — in a few lines of Python.
 
 ![QDSeg demo — AFM height map and advanced segmentation result](docs/demo.png)
 
@@ -104,6 +104,13 @@ stats = calculate_grain_statistics(labels, height, meta)
 
 ---
 
+## Supported file formats
+
+The only supported input format is currently `.xqd` (Nanonavi / SII NanoTechnology proprietary binary format).
+Support for additional formats (e.g. Bruker `.spm`, Park `.xpp`, plain-text grids) can be added as needed.
+
+---
+
 ## Installation
 
 ### Minimal (rule-based / watershed / thresholding only)
@@ -184,6 +191,8 @@ qdseg/
 │   └── utils.py             # GPU detection
 ├── tests/
 │   ├── test_core.py
+│   ├── test_data/
+│   │   └── test.xqd        # bundled sample file
 │   └── example_usage.py
 └── setup.py
 ```
