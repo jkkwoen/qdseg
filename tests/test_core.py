@@ -1,7 +1,7 @@
 """
 Unit tests for qdseg core modules.
 
-No XQD files required — all tests use synthetic numpy arrays.
+Most tests use synthetic numpy arrays; TestRealXQD requires tests/test_data/test.xqd.
 
 Run:
     cd /path/to/qdseg
@@ -9,6 +9,7 @@ Run:
 """
 
 import math
+import pathlib
 import numpy as np
 import pytest
 
@@ -424,6 +425,52 @@ class TestCellposeV4Compat:
         assert len(result) == 3, f"Expected 3-tuple, got {len(result)}-tuple"
         masks = result[0]
         assert masks.shape == (32, 32), f"Unexpected masks shape: {masks.shape}"
+
+
+# ─── real XQD integration ────────────────────────────────────────────────────
+
+_TEST_XQD = pathlib.Path(__file__).parent / "test_data" / "test.xqd"
+
+
+@pytest.mark.skipif(not _TEST_XQD.exists(), reason="test.xqd not found")
+class TestRealXQD:
+    """End-to-end tests using the bundled test.xqd sample file."""
+
+    def setup_method(self):
+        from qdseg import AFMData
+        self.data = AFMData(str(_TEST_XQD))
+        self.pre = self.data.baseline_correction()
+        self.pre.segment(method="advanced")
+
+    def test_load_succeeds(self):
+        """AFMData loads the xqd file without error and produces a 2-D array."""
+        assert self.data.height_raw.ndim == 2
+        assert self.data.height_raw.shape[0] > 0
+        assert self.data.height_raw.shape[1] > 0
+
+    def test_segment_detects_grains(self):
+        """Advanced segmentation finds at least one grain on real data."""
+        assert self.pre.labels.max() >= 1
+
+    def test_stats_keys_present(self):
+        """stats() returns a dict containing all expected top-level keys."""
+        stats = self.pre.stats()
+        for key in ("num_grains", "mean_height_nm", "mean_diameter_nm", "area_fraction"):
+            assert key in stats, f"Missing key: {key}"
+
+    def test_stats_plausible_values(self):
+        """Returned statistics are physically plausible for a QD sample."""
+        stats = self.pre.stats()
+        assert stats["num_grains"] >= 1
+        assert 1.0 < stats["mean_height_nm"] < 100.0     # typical QD: 5-30 nm
+        assert 10.0 < stats["mean_diameter_nm"] < 500.0  # typical QD: 20-200 nm
+        assert 0.0 < stats["area_fraction"] <= 1.0
+
+    def test_grains_count_matches_stats(self):
+        """Length of grains() list equals stats()['num_grains']."""
+        stats = self.pre.stats()
+        grains = self.pre.grains()
+        assert len(grains) == stats["num_grains"]
 
 
 # ─── entry point ────────────────────────────────────────────────────────────
