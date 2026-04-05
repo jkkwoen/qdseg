@@ -219,32 +219,6 @@ For NVIDIA server deployment with Docker, see [GPU_DOCKER.md](GPU_DOCKER.md).
 
 ---
 
-## Citation
-
-If you use QDSeg in your research, please cite:
-
-```
-Kwon, J. QDSeg: A Python Package for Segmentation and Statistical Analysis
-of Quantum Dot AFM Images, version 0.4.1; Zenodo, 2026.
-https://doi.org/10.5281/zenodo.19424802
-```
-
-Or in BibTeX:
-
-```bibtex
-@software{kwon_qdseg_2026,
-  author  = {Kwon, Jinkwan},
-  title   = {{QDSeg}: A Python Package for Segmentation and Statistical Analysis of Quantum Dot {AFM} Images},
-  version = {0.4.1},
-  year    = {2026},
-  publisher = {Zenodo},
-  doi     = {10.5281/zenodo.19424802},
-  url     = {https://doi.org/10.5281/zenodo.19424802}
-}
-```
-
----
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
