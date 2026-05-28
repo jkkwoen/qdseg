@@ -310,6 +310,82 @@ class TestAFMDataReset:
         assert obj._labels is None, "reset() should clear _labels"
 
 
+class TestAFMDataCrop:
+    """AFMData.crop() should restrict analysis data and update metadata."""
+
+    def _make_obj(self):
+        from qdseg import AFMData
+        obj = AFMData.__new__(AFMData)
+        raw = np.arange(60, dtype=np.float64).reshape(6, 10)
+        obj.file_path = "synthetic.xqd"
+        obj.height_raw = raw
+        obj.current_data = raw.copy()
+        obj.meta = {
+            "xres": 10,
+            "yres": 6,
+            "pixel_nm": (2.0, 5.0),
+            "pixel_um": (0.002, 0.005),
+            "scan_size_nm": (20.0, 30.0),
+            "scan_size_um": (0.02, 0.03),
+            "zscale_nm_per_count": 1.0,
+            "zoffset_nm": 0.0,
+        }
+        obj._labels = None
+        return obj, raw
+
+    def test_crop_px_updates_data_and_meta(self):
+        obj, raw = self._make_obj()
+        obj.crop(2, 7, 1, 5, unit="px")
+        assert np.array_equal(obj.get_data(), raw[1:5, 2:7])
+        assert np.array_equal(obj.get_raw_data(), raw[1:5, 2:7])
+        assert obj.get_meta()["xres"] == 5
+        assert obj.get_meta()["yres"] == 4
+        assert obj.get_meta()["scan_size_nm"] == (10.0, 20.0)
+        assert obj.get_meta()["crop_bounds_px"] == (2, 7, 1, 5)
+        assert obj.get_meta()["crop_bounds_nm"] == (4.0, 14.0, 5.0, 25.0)
+
+    def test_crop_nm_converts_to_pixel_bounds(self):
+        obj, raw = self._make_obj()
+        obj.crop_nm(4.0, 14.0, 5.0, 25.0)
+        assert np.array_equal(obj.get_data(), raw[1:5, 2:7])
+        assert obj.get_meta()["crop_origin_nm"] == (4.0, 5.0)
+
+    def test_crop_defaults_to_full_pixel_range(self):
+        obj, raw = self._make_obj()
+        obj.crop()
+        assert np.array_equal(obj.get_data(), raw)
+        assert obj.get_meta()["xres"] == 10
+        assert obj.get_meta()["yres"] == 6
+        assert obj.get_meta()["crop_bounds_px"] == (0, 10, 0, 6)
+
+    def test_crop_nm_defaults_to_full_range(self):
+        obj, raw = self._make_obj()
+        obj.crop_nm()
+        assert np.array_equal(obj.get_data(), raw)
+        assert obj.get_meta()["scan_size_nm"] == (20.0, 30.0)
+        assert obj.get_meta()["crop_bounds_nm"] == (0.0, 20.0, 0.0, 30.0)
+
+    def test_crop_allows_partial_default_bounds(self):
+        obj, raw = self._make_obj()
+        obj.crop_px(x_min=2, y_min=1)
+        assert np.array_equal(obj.get_data(), raw[1:, 2:])
+        assert obj.get_meta()["crop_bounds_px"] == (2, 10, 1, 6)
+
+    def test_crop_clears_labels_and_reset_keeps_cropped_raw(self):
+        obj, raw = self._make_obj()
+        obj._labels = np.ones(raw.shape, dtype=np.int32)
+        obj.crop_px(1, 4, 2, 6)
+        obj.current_data = obj.current_data + 10.0
+        obj.reset()
+        assert obj.labels is None
+        assert np.array_equal(obj.get_data(), raw[2:6, 1:4])
+
+    def test_crop_rejects_out_of_bounds(self):
+        obj, _ = self._make_obj()
+        with pytest.raises(ValueError):
+            obj.crop_px(0, 11, 0, 2)
+
+
 # ─── analyze._filter_small_labels ────────────────────────────────────────────
 
 

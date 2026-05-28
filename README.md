@@ -28,6 +28,7 @@ pip install git+https://github.com/jkkwoen/qdseg.git
 from qdseg import AFMData
 
 data = AFMData("sample.xqd")
+data.crop_px(x_min=100, x_max=400, y_min=80, y_max=360)  # optional crop
 data.first_correction()
 data.second_correction()
 data.third_correction()
@@ -48,6 +49,18 @@ labels = data.segment()            # returns np.ndarray and stores as data.label
 grains = data.grains()             # list of per-grain dicts
 ```
 
+To analyze only part of an XQD image, crop before corrections/segmentation:
+
+```python
+data.crop()  # default: full current range
+data.crop_px(x_min=100, x_max=400, y_min=80, y_max=360)
+data.crop_nm(x_min=1000.0, x_max=4000.0, y_min=800.0, y_max=3600.0)
+```
+
+Crop ranges are half-open (`x_min <= x < x_max`, `y_min <= y < y_max`).
+Metadata such as `scan_size_nm`, `xres`, and `yres` is updated for the cropped
+area. Omitted bounds default to the full current data range.
+
 To save results:
 
 ```python
@@ -67,6 +80,7 @@ from qdseg import segment, calculate_grain_statistics
 labels = segment(height, meta)                        # default: advanced
 labels = segment(height, meta, method='watershed')
 labels = segment(height, meta, method='stardist', prob_thresh=0.6)
+labels = segment(height, meta, method='cellpose')
 
 stats = calculate_grain_statistics(labels, height, meta)
 ```
