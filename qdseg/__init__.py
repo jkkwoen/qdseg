@@ -50,6 +50,14 @@ from .statistics import (
     get_individual_grains,
 )
 
+# AFM file I/O
+from .io import (
+    load_height_nm,
+    load_nanoscope_height_nm,
+    read_nanoscope_header,
+    read_nanoscope_raw,
+)
+
 # save_results
 from .analyze import save_results
 
@@ -84,6 +92,11 @@ __all__ = [
     # Statistics
     "calculate_grain_statistics",
     "get_individual_grains",
+    # AFM file I/O
+    "load_height_nm",
+    "load_nanoscope_height_nm",
+    "read_nanoscope_header",
+    "read_nanoscope_raw",
     # Results I/O
     "save_results",
     # GPU utilities

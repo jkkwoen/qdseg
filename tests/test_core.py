@@ -386,6 +386,68 @@ class TestAFMDataCrop:
             obj.crop_px(0, 11, 0, 2)
 
 
+# ─── Bruker / Veeco NanoScope I/O ───────────────────────────────────────────
+
+
+class TestNanoScopeIO:
+    """Bruker/Veeco NanoScope .spm image loading."""
+
+    def _write_spm(self, tmp_path):
+        path = tmp_path / "synthetic.spm"
+        data_offset = 4096
+        raw = np.arange(16, dtype="<i4").reshape(4, 4)
+        header = "\n".join([
+            r"\*File list",
+            r"\Version: 0x09400000",
+            r"\*Ciao scan list",
+            r"\Scan Size: 0.04 ~m",
+            r"\*Ciao image list",
+            r'\@2:Image Data: S [Height] "Height"',
+            rf"\Data offset: {data_offset}",
+            rf"\Data length: {raw.size * 4}",
+            r"\Bytes/pixel: 4",
+            r"\Samps/line: 4",
+            r"\Number of lines: 4",
+            r"\@2:Z scale: V [Sens. Zsens] (1.0) V 65536 nm",
+            r"\*File list end",
+            "",
+        ]).encode("ascii")
+        padding = b"\x00" * (data_offset - len(header))
+        path.write_bytes(header + padding + raw.tobytes())
+        return path, raw
+
+    def test_read_nanoscope_header(self, tmp_path):
+        from qdseg.io import read_nanoscope_header
+
+        path, _ = self._write_spm(tmp_path)
+        header = read_nanoscope_header(path)
+
+        assert header["format"] == "nanoscope"
+        assert header["channel"] == "Height"
+        assert header["xres"] == 4
+        assert header["yres"] == 4
+        assert header["pixel_nm"] == (10.0, 10.0)
+        assert header["zscale_nm_per_count"] == pytest.approx(1.0)
+
+    def test_load_height_nm_dispatches_spm(self, tmp_path):
+        from qdseg.io import load_height_nm
+
+        path, raw = self._write_spm(tmp_path)
+        height, meta = load_height_nm(path)
+
+        assert meta["format"] == "nanoscope"
+        assert np.array_equal(height, np.flipud(raw.astype(np.float64)))
+
+    def test_afmdata_loads_spm(self, tmp_path):
+        from qdseg import AFMData
+
+        path, raw = self._write_spm(tmp_path)
+        data = AFMData(str(path))
+
+        assert data.get_meta()["format"] == "nanoscope"
+        assert np.array_equal(data.get_raw_data(), np.flipud(raw.astype(np.float64)))
+
+
 # ─── analyze._filter_small_labels ────────────────────────────────────────────
 
 
