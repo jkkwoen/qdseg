@@ -94,3 +94,5 @@
 
 29. bruker nanoscope 에 관한 해석기 gwyddion 등에서 사용되고 있는 것 있으면 가져와서 처리할 수 있게 해줄래?
    - Bruker/Veeco NanoScope `.spm`/`.001` 계열 파일을 `Data offset`, `Samps/line`, `Number of lines`, `Bytes/pixel`, `Z scale` 기반으로 읽는 독립 파서를 추가하고 `AFMData`에서 자동 로드되게 처리함.
+30. nanoscope 는 파일이 .000, .001, .002 ... 같이 늘어나나봐.
+   - NanoScope 숫자 확장자 `.000`, `.001`, `.002` 계열이 자동 로드 대상임을 문서화하고 `.000` 자동 분기 테스트를 추가함.

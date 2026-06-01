@@ -392,8 +392,8 @@ class TestAFMDataCrop:
 class TestNanoScopeIO:
     """Bruker/Veeco NanoScope .spm image loading."""
 
-    def _write_spm(self, tmp_path):
-        path = tmp_path / "synthetic.spm"
+    def _write_spm(self, tmp_path, suffix=".spm"):
+        path = tmp_path / f"synthetic{suffix}"
         data_offset = 4096
         raw = np.arange(16, dtype="<i4").reshape(4, 4)
         header = "\n".join([
@@ -433,6 +433,15 @@ class TestNanoScopeIO:
         from qdseg.io import load_height_nm
 
         path, raw = self._write_spm(tmp_path)
+        height, meta = load_height_nm(path)
+
+        assert meta["format"] == "nanoscope"
+        assert np.array_equal(height, np.flipud(raw.astype(np.float64)))
+
+    def test_load_height_nm_dispatches_numbered_nanoscope(self, tmp_path):
+        from qdseg.io import load_height_nm
+
+        path, raw = self._write_spm(tmp_path, suffix=".000")
         height, meta = load_height_nm(path)
 
         assert meta["format"] == "nanoscope"

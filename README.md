@@ -27,7 +27,7 @@ pip install git+https://github.com/jkkwoen/qdseg.git
 ```python
 from qdseg import AFMData
 
-data = AFMData("sample.xqd")  # XQD/XQF and Bruker NanoScope SPM are supported
+data = AFMData("sample.xqd")  # XQD/XQF and Bruker NanoScope are supported
 data.crop_px(x_min=100, x_max=400, y_min=80, y_max=360)  # optional crop
 data.first_correction()
 data.second_correction()
@@ -126,7 +126,7 @@ QDSeg can load these AFM height-image formats:
 | Format | Extensions | Notes |
 |--------|------------|-------|
 | Nanonavi / SII NanoTechnology XQD/XQF | `.xqd`, `.xqf` | Native bundled parser |
-| Bruker / Veeco NanoScope | `.spm`, `.001`, `.002`, etc. | Reads common image channels from the text header and binary image block |
+| Bruker / Veeco NanoScope | `.spm`, `.000`, `.001`, `.002`, etc. | Reads common image channels from the text header and binary image block |
 
 NanoScope loading follows the same metadata fields used by tools such as
 Gwyddion (`Data offset`, `Data length`, `Samps/line`, `Number of lines`,
