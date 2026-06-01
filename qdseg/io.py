@@ -265,7 +265,9 @@ def _parse_length_nm(value, default_unit: str = "nm") -> float | None:
 
     number, unit = matches[-1]
     unit = (unit or default_unit).replace("Å", "angstrom").lower()
-    return float(number) * _LENGTH_UNITS_TO_NM.get(unit, 1.0)
+    if unit not in _LENGTH_UNITS_TO_NM:
+        unit = default_unit
+    return float(number) * _LENGTH_UNITS_TO_NM[unit]
 
 
 def _nanoscope_channel_name(section: Dict) -> str:
@@ -345,7 +347,10 @@ def read_nanoscope_header(
 
     zscale_nm = None
     for section in [image] + sections:
-        zscale_nm = _parse_length_nm(_get_nanoscope_item(section, "Z scale"))
+        zscale_nm = _parse_length_nm(
+            _get_nanoscope_item(section, "Z scale"),
+            default_unit="um",
+        )
         if zscale_nm is not None:
             break
 

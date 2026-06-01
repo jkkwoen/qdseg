@@ -447,6 +447,34 @@ class TestNanoScopeIO:
         assert meta["format"] == "nanoscope"
         assert np.array_equal(height, np.flipud(raw.astype(np.float64)))
 
+    def test_nanoscope_zscale_without_length_unit_defaults_to_um(self, tmp_path):
+        from qdseg.io import read_nanoscope_header
+
+        path = tmp_path / "synthetic.001"
+        data_offset = 4096
+        raw = np.zeros((4, 4), dtype="<i2")
+        header = "\n".join([
+            r"\*File list",
+            r"\*Ciao scan list",
+            r"\Scan Size: 1 ~m",
+            r"\*Ciao image list",
+            r'\@2:Image Data: S [ZSensor] "Height Sensor"',
+            rf"\Data offset: {data_offset}",
+            rf"\Data length: {raw.size * 2}",
+            r"\Bytes/pixel: 2",
+            r"\Samps/line: 4",
+            r"\Number of lines: 4",
+            r"\@2:Z scale: V [Sens. ZsensSens] (0.0003750000 V/LSB) 24.57563 V",
+            r"\*File list end",
+            "",
+        ]).encode("ascii")
+        path.write_bytes(header + b"\x00" * (data_offset - len(header)) + raw.tobytes())
+
+        meta = read_nanoscope_header(path)
+
+        assert meta["pixel_nm"] == (250.0, 250.0)
+        assert meta["zscale_nm_per_count"] == pytest.approx(0.3749943542480469)
+
     def test_afmdata_loads_spm(self, tmp_path):
         from qdseg import AFMData
 

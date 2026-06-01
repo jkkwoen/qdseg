@@ -96,5 +96,7 @@
    - Bruker/Veeco NanoScope `.spm`/`.001` 계열 파일을 `Data offset`, `Samps/line`, `Number of lines`, `Bytes/pixel`, `Z scale` 기반으로 읽는 독립 파서를 추가하고 `AFMData`에서 자동 로드되게 처리함.
 30. nanoscope 는 파일이 .000, .001, .002 ... 같이 늘어나나봐.
    - NanoScope 숫자 확장자 `.000`, `.001`, `.002` 계열이 자동 로드 대상임을 문서화하고 `.000` 자동 분기 테스트를 추가함.
-31. StarDist/Cellpose 도 부탁해.
+31. height 가 nm 가 아니라 um 단위인듯. 환산해서 바꿔줘.
+   - NanoScope `Z scale`이 명시적 길이 단위 없이 `V` 등 장비 단위로 기록된 경우 um 기준 스케일로 해석하고 nm로 환산하도록 수정함.
+32. StarDist/Cellpose 도 부탁해.
    - `rtx-pro-6000`의 `qdseg_slide` venv에 TensorFlow를 추가한 뒤 `test.001`을 Cellpose GPU와 StarDist로 분류하고 결과를 `summary_md/test_001_nanoscope_models/`에 저장함.

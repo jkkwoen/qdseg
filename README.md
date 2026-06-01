@@ -131,7 +131,9 @@ QDSeg can load these AFM height-image formats:
 NanoScope loading follows the same metadata fields used by tools such as
 Gwyddion (`Data offset`, `Data length`, `Samps/line`, `Number of lines`,
 `Bytes/pixel`, `Z scale`). The default channel is the first channel containing
-`Height`, falling back to the first image channel.
+`Height`, falling back to the first image channel. NanoScope Z scales that use
+instrument units such as `V` are interpreted as micrometer-scale values and
+converted to nanometers.
 
 ---
 
