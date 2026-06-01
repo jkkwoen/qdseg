@@ -208,7 +208,8 @@ data.first_correction().align_rows(method='median').baseline_correction("min_to_
 qdseg/
 ├── qdseg/
 │   ├── __init__.py          # public API
-│   ├── io.py                # XQD file reader
+│   ├── io.py                # AFM file dispatch + XQD reader
+│   ├── nanoscope.py         # Bruker/Veeco NanoScope reader
 │   ├── afm_data_wrapper.py  # AFMData class
 │   ├── corrections.py       # artefact corrections
 │   ├── segmentation.py      # segmentation algorithms

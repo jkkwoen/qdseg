@@ -429,6 +429,14 @@ class TestNanoScopeIO:
         assert header["pixel_nm"] == (10.0, 10.0)
         assert header["zscale_nm_per_count"] == pytest.approx(1.0)
 
+    def test_nanoscope_module_path_detection(self):
+        from qdseg.nanoscope import is_nanoscope_path
+
+        assert is_nanoscope_path("scan.spm")
+        assert is_nanoscope_path("scan.000")
+        assert is_nanoscope_path("scan.999")
+        assert not is_nanoscope_path("scan.xqd")
+
     def test_load_height_nm_dispatches_spm(self, tmp_path):
         from qdseg.io import load_height_nm
 

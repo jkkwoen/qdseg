@@ -100,3 +100,5 @@
    - NanoScope `Z scale`이 명시적 길이 단위 없이 `V` 등 장비 단위로 기록된 경우 um 기준 스케일로 해석하고 nm로 환산하도록 수정함.
 32. StarDist/Cellpose 도 부탁해.
    - `rtx-pro-6000`의 `qdseg_slide` venv에 TensorFlow를 추가한 뒤 `test.001`을 Cellpose GPU와 StarDist로 분류하고 결과를 `summary_md/test_001_nanoscope_models/`에 저장함.
+33. 모듈화 해서 0.4.3 으로 만들어줘.
+   - NanoScope 로더를 `qdseg/nanoscope.py`로 분리하고 `qdseg.io`의 기존 public import 경로를 유지한 뒤 버전을 0.4.3으로 올림.
