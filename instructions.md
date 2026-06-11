@@ -106,3 +106,5 @@
    - `.venv`에서 실제 XQD/NanoScope 테스트 13개와 `tests/test_data` 69개 파일 전체 로드 검증을 모두 통과함.
 35. test 데이터는 빼고 다시 커밋해줘.
    - `tests/test_data/`를 ignore 대상으로 두고 기존 추적 fixture `test.xqd`를 git index에서 제거함.
+36. test_data 의 000 파일들을 가지고 일단 기본 처리만 한 pdf export 해줄래?
+   - `tests/test_data/*.000` 39개를 기본 correction+advanced segmentation으로 처리해 40페이지 PDF와 CSV 요약을 `summary_md/test_data_000_basic_export/`에 생성함.
