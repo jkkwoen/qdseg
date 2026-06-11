@@ -110,3 +110,5 @@
    - `tests/test_data/*.000` 39개를 기본 correction+advanced segmentation으로 처리해 40페이지 PDF와 CSV 요약을 `summary_md/test_data_000_basic_export/`에 생성함.
 37. README를 현재 qdseg public API와 지원 포맷 기준으로 새로 작성하고 GitHub에 push 해줘.
    - README를 설치/사용법/보정/분할/통계/GPU/개발 섹션 중심으로 재작성하고 검증 후 GitHub에 push함.
+38. README의 labels 대표 예제를 Cellpose 중심으로 바꿔줘.
+   - Quick Start와 배열 API/segmentation 예제의 `labels` 생성을 Cellpose 대표 예제로 바꾸고 advanced는 dependency-light 대안으로 설명함.

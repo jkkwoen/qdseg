@@ -55,6 +55,10 @@ pip install "qdseg[mac-gpu] @ git+https://github.com/jkkwoen/qdseg.git"
 
 ## Quick Start
 
+This example uses Cellpose for the representative `labels` output. Install
+`qdseg[cellpose]` first, or use `method="advanced"` for a dependency-light
+rule-based pipeline.
+
 ```python
 from qdseg import AFMData
 
@@ -67,7 +71,7 @@ data.align_rows(method="median")
 data.flat_correction("line_by_line")
 data.baseline_correction("min_to_zero")
 
-labels = data.segment(method="advanced")
+labels = data.segment(method="cellpose")
 stats = data.stats()
 grains = data.grains()
 
@@ -90,7 +94,7 @@ meta = {
     "scan_size_nm": (1024.0, 1024.0),
 }
 
-labels = segment(height_nm, meta, method="advanced")
+labels = segment(height_nm, meta, method="cellpose")
 stats = calculate_grain_statistics(labels, height_nm, meta)
 grains = get_individual_grains(labels, height_nm, meta)
 ```
@@ -149,6 +153,8 @@ The main dispatcher is `segment(height, meta, method=...)`, and `AFMData.segment
 Thresholding supports `otsu`, `isodata`, `li`, `triangle`, `yen`, `minimum`, and `manual`.
 
 ```python
+labels = data.segment(method="cellpose", diameter=30)
+
 labels = data.segment(method="thresholding", threshold_method="li")
 
 labels = data.segment(
@@ -162,7 +168,7 @@ labels = data.segment(
 labels = data.segment(method="watershed", min_distance=8)
 ```
 
-Start with `advanced` for standard quantum-dot AFM images. Use `thresholding` when you need explicit threshold control, and `watershed` or distance separation when connected grains need to be split.
+Use `cellpose` when the optional Cellpose backend is installed and you want a deep-learning instance segmentation result. Start with `advanced` when you need a dependency-light rule-based baseline. Use `thresholding` when you need explicit threshold control, and `watershed` or distance separation when connected grains need to be split.
 
 ## Statistics
 
