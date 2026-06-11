@@ -104,3 +104,5 @@
    - NanoScope 로더를 `qdseg/nanoscope.py`로 분리하고 `qdseg.io`의 기존 public import 경로를 유지한 뒤 버전을 0.4.3으로 올림.
 34. tests/test_data 의 파일을 대상으로 테스트 해봐줄래?
    - `.venv`에서 실제 XQD/NanoScope 테스트 13개와 `tests/test_data` 69개 파일 전체 로드 검증을 모두 통과함.
+35. test 데이터는 빼고 다시 커밋해줘.
+   - `tests/test_data/`를 ignore 대상으로 두고 기존 추적 fixture `test.xqd`를 git index에서 제거함.
