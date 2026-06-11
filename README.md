@@ -180,7 +180,7 @@ Use `cellpose` when the optional Cellpose backend is installed and you want a de
 | Area | `mean_area_px`, `mean_area_nm2`, `std_area_nm2`, `min_area_nm2`, `max_area_nm2` |
 | Diameter and perimeter | `mean_diameter_nm`, `mean_diameter_px`, `mean_perimeter_nm`, `mean_perimeter_px` |
 | Height and volume | `mean_height_nm`, `mean_height_peak_nm`, `mean_height_centroid_nm`, `mean_volume_nm3` |
-| Shape | `mean_eccentricity`, `mean_solidity`, `mean_aspect_ratio`, `orientations_rad` |
+| Shape | `mean_eccentricity`, `mean_solidity`, `mean_aspect_ratio`, `orientations_deg` |
 | Per-grain arrays | `areas_nm2`, `diameters_nm`, `perimeters_nm`, `major_axis_nm`, `minor_axis_nm` |
 
 `data.grains()` and `get_individual_grains()` return one dictionary per grain, including:
@@ -193,7 +193,7 @@ Use `cellpose` when the optional Cellpose backend is installed and you want a de
 - `height_mean_nm`, `height_std_nm`, `height_peak_nm`, `height_centroid_nm`
 - `peak_to_centroid_dist_nm`, `volume_nm3`
 - `major_axis_nm`, `minor_axis_nm`, `perimeter_px`, `perimeter_nm`
-- `eccentricity`, `solidity`, `aspect_ratio`, `orientation_deg`
+- `eccentricity`, `solidity`, `aspect_ratio`, `orientation_deg` (x-axis degrees)
 
 ## Saving Results
 

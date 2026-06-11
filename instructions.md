@@ -112,3 +112,5 @@
    - README를 설치/사용법/보정/분할/통계/GPU/개발 섹션 중심으로 재작성하고 검증 후 GitHub에 push함.
 38. README의 labels 대표 예제를 Cellpose 중심으로 바꿔줘.
    - Quick Start와 배열 API/segmentation 예제의 `labels` 생성을 Cellpose 대표 예제로 바꾸고 advanced는 dependency-light 대안으로 설명함.
+39. orientation_deg를 x축 기준으로 만들고 radian orientation key를 제거해줘.
+   - `orientation_deg`/`orientations_deg`를 x축 기준 degree로 통일하고 `orientations_rad` 반환과 문서/테스트 참조를 제거함.

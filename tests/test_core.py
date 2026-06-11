@@ -163,26 +163,41 @@ class TestStatistics:
         stats = self.calc(labels, self.height, self.meta)
         assert stats['num_grains'] == 4
 
-    def test_orientations_rad_correct(self):
-        """orientations_rad must contain actual values, not all zeros."""
+    def test_orientations_deg_correct(self):
+        """orientations_deg must contain finite x-axis degree values."""
         labels = self._make_labels()
         stats = self.calc(labels, self.height, self.meta)
-        orientations = stats['orientations_rad']
+        orientations = stats['orientations_deg']
         assert len(orientations) == 4
         # Should be finite values (not NaN)
         assert np.all(np.isfinite(orientations))
+        assert 'orientations_rad' not in stats
 
-    def test_orientations_rad_not_all_zero(self):
+    def test_orientations_deg_shape(self):
         """Previously this was hardcoded to np.array([0.0]*N) — verify the fix."""
-        from qdseg.statistics import get_individual_grains
         labels = self._make_labels()
-        grains = get_individual_grains(labels, self.height, self.meta)
         # Orientation values come from regionprops and should vary
         # (they will be 0 only if all grains are perfectly square, which they are
         # in this test — so we just check the dtype/shape are correct)
         stats = self.calc(labels, self.height, self.meta)
-        assert stats['orientations_rad'].dtype in (np.float32, np.float64)
-        assert len(stats['orientations_rad']) == stats['num_grains']
+        assert stats['orientations_deg'].dtype in (np.float32, np.float64)
+        assert len(stats['orientations_deg']) == stats['num_grains']
+
+    def test_orientation_deg_is_x_axis_based(self):
+        """Horizontal major axis is 0 degrees; vertical major axis is 90 degrees."""
+        labels = np.zeros((64, 64), dtype=np.int32)
+        labels[10:15, 8:48] = 1
+        labels[20:60, 50:55] = 2
+        height = np.ones_like(labels, dtype=np.float64)
+
+        grains = self.individual(labels, height, self.meta)
+        by_id = {g['grain_id']: g for g in grains}
+
+        assert by_id[1]['orientation_deg'] == pytest.approx(0.0, abs=1e-6)
+        assert by_id[2]['orientation_deg'] == pytest.approx(90.0, abs=1e-6)
+
+        stats = self.calc(labels, height, self.meta)
+        assert sorted(np.round(stats['orientations_deg'], 6)) == [0.0, 90.0]
 
     def test_areas_consistent(self):
         labels = self._make_labels()

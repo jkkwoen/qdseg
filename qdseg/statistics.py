@@ -17,6 +17,11 @@ from skimage import measure
 from scipy.ndimage import sum as ndi_sum, maximum_position
 
 
+def _orientation_from_x_axis_deg(orientation_rad: np.ndarray) -> np.ndarray:
+    """Convert skimage row-axis orientation to image x-axis degrees."""
+    return (90.0 - np.rad2deg(orientation_rad)) % 180.0
+
+
 def calculate_grain_statistics(
     labels: np.ndarray,
     height: Optional[np.ndarray] = None,
@@ -60,7 +65,7 @@ def calculate_grain_statistics(
         - mean_height_peak_nm, std_height_peak_nm: float (if height provided)
         - mean_height_centroid_nm, std_height_centroid_nm: float (if height provided)
         - mean_volume_nm3, std_volume_nm3: float (if height provided)
-        - areas_nm2, diameters_nm: np.ndarray (per-grain arrays)
+        - areas_nm2, diameters_nm, orientations_deg: np.ndarray (per-grain arrays)
 
     Examples
     --------
@@ -172,7 +177,7 @@ def calculate_grain_statistics(
             'aspect_ratios': aspect_ratios,
             'major_axis_nm': major_axis_nm,
             'minor_axis_nm': minor_axis_nm,
-            'orientations_rad': np.deg2rad(orientations_deg),
+            'orientations_deg': orientations_deg,
         }
     
     # Fallback: basic statistics without height data
@@ -216,6 +221,7 @@ def calculate_grain_statistics(
     diameters_px = 2 * np.sqrt(areas_px / np.pi)
     major_axis_nm = major_axis_px * pixel_length_nm
     minor_axis_nm = minor_axis_px * pixel_length_nm
+    orientations_deg = _orientation_from_x_axis_deg(orientations)
     
     # Calculate aspect ratios (handle division by zero)
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -275,7 +281,7 @@ def calculate_grain_statistics(
         'aspect_ratios': aspect_ratios,
         'major_axis_nm': major_axis_nm,
         'minor_axis_nm': minor_axis_nm,
-        'orientations_rad': orientations,
+        'orientations_deg': orientations_deg,
     }
 
 
@@ -314,7 +320,7 @@ def get_individual_grains(
         - height_mean_nm, height_std_nm, height_max_nm: float
         - major_axis_nm, minor_axis_nm, aspect_ratio: float
         - perimeter_nm, perimeter_px: float
-        - eccentricity, solidity, orientation_deg: float
+        - eccentricity, solidity, orientation_deg: float (x-axis degrees)
     
     Examples
     --------
@@ -378,7 +384,7 @@ def get_individual_grains(
     minor_nm            = minor_px * px_length_nm
     with np.errstate(divide='ignore', invalid='ignore'):
         aspect_ratio = np.where(minor_px > 0, major_px / minor_px, 1.0)
-    orientation_deg     = orientation * (180.0 / np.pi)
+    orientation_deg     = _orientation_from_x_axis_deg(orientation)
     convex_area_nm2     = convex_area * px_area_nm2
 
     # Centroid in nm
@@ -505,6 +511,5 @@ def _empty_statistics() -> Dict[str, Any]:
         'aspect_ratios': np.array([]),
         'major_axis_nm': np.array([]),
         'minor_axis_nm': np.array([]),
-        'orientations_rad': np.array([]),
+        'orientations_deg': np.array([]),
     }
-
