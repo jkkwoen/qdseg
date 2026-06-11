@@ -108,3 +108,5 @@
    - `tests/test_data/`를 ignore 대상으로 두고 기존 추적 fixture `test.xqd`를 git index에서 제거함.
 36. test_data 의 000 파일들을 가지고 일단 기본 처리만 한 pdf export 해줄래?
    - `tests/test_data/*.000` 39개를 기본 correction+advanced segmentation으로 처리해 40페이지 PDF와 CSV 요약을 `summary_md/test_data_000_basic_export/`에 생성함.
+37. README를 현재 qdseg public API와 지원 포맷 기준으로 새로 작성하고 GitHub에 push 해줘.
+   - README를 설치/사용법/보정/분할/통계/GPU/개발 섹션 중심으로 재작성하고 검증 후 GitHub에 push함.
